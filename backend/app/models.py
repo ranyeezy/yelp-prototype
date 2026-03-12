@@ -65,7 +65,7 @@ class Restaurant(Base):
     listed_by_user = relationship("User", back_populates="listed_restaurants")
     reviews = relationship("Review", back_populates="restaurant", cascade="all, delete-orphan")
     favorites = relationship("Favorite", back_populates="restaurant", cascade="all, delete-orphan")
-    owner_links = relationship("OwnerRestaurant", back_populates="restaurant", cascade="all, delete-orphan")
+    owner_claims = relationship("OwnerRestaurant", back_populates="restaurant", cascade="all, delete-orphan")
 
 #review table
 class Review(Base):
@@ -125,4 +125,4 @@ class OwnerRestaurant(Base):
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     owner = relationship("Owner", back_populates="owner_restaurants")
-    restaurant = relationship("Restaurant", back_populates="owner_links")
+    restaurant = relationship("Restaurant", back_populates="owner_claims")
