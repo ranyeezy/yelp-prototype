@@ -103,7 +103,8 @@ class UserPreference(Base):
     
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     cuisines: Mapped[str | None] = mapped_column(Text, nullable=True)
-    price_range: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    price_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    price_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     preferred_locations: Mapped[str | None] = mapped_column(Text, nullable=True)
     search_radius: Mapped[int | None] = mapped_column(Integer, nullable=True)
     dietary_needs: Mapped[str | None] = mapped_column(Text, nullable=True)

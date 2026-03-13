@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import Base, engine
 from . import models
-from .routers import auth, users, owners
+from .routers import auth, users, owners, preferences
 
 app = FastAPI(title="Yelp Prototype API")
 
@@ -22,6 +22,7 @@ def startup():
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(owners.router)
+app.include_router(preferences.router)
 
 @app.get("/")
 def health():

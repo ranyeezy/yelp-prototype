@@ -73,3 +73,29 @@ class OwnerOut(BaseModel):
 
     class Config:
         from_attributes = True
+        
+#user preferences
+class UserPreferencesIn(BaseModel):
+    cuisines: Optional[str] = None
+    price_min: Optional[int] = Field(default=None, ge=1, le=4)
+    price_max: Optional[int] = Field(default=None, ge=1, le=4)
+    preferred_locations: Optional[str] = None
+    search_radius: Optional[int] = None
+    dietary_needs: Optional[str] = None
+    ambiance: Optional[str] = None
+    sort_preference: Optional[str] = None
+
+class UserPreferencesOut(BaseModel):
+    user_id: int
+    cuisines: Optional[str] = None
+    price_min: Optional[int] = Field(default=None, ge=1, le=4)
+    price_max: Optional[int] = Field(default=None, ge=1, le=4)
+    preferred_locations: Optional[str] = None
+    search_radius: Optional[int] = None
+    dietary_needs: Optional[str] = None
+    ambiance: Optional[str] = None
+    sort_preference: Optional[str] = None
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
