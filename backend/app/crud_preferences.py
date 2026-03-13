@@ -4,8 +4,7 @@ from . import models, schemas
 def get_user_preferences(db: Session, user_id: int) -> models.UserPreference | None:
     return db.get(models.UserPreference, user_id)
 
-def upsert_user_preferences(
-    db: Session, user_id: int, payload: schemas.UserPreferencesIn) -> models.UserPreference:
+def upsert_user_preferences(db: Session, user_id: int, payload: schemas.UserPreferencesIn) -> models.UserPreference:
     prefs = db.get(models.UserPreference, user_id)
 
     data = payload.model_dump(exclude_unset=True)
