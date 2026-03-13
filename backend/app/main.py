@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import Base, engine
 from . import models
+from .routers import auth, users, owners
 
 app = FastAPI(title="Yelp Prototype API")
 
@@ -17,6 +18,10 @@ app.add_middleware(
 def startup():
     # Keeps backend minimal: auto-creates tables if missing
     Base.metadata.create_all(bind=engine)
+    
+app.include_router(auth.router)
+app.include_router(users.router)
+app.include_router(owners.router)
 
 @app.get("/")
 def health():
