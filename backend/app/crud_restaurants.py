@@ -28,7 +28,7 @@ def list_restaurants(
     cuisine_type: str | None = None,
     keyword: str | None = None,
     city: str | None = None,
-    zip_code: str | None = None,
+    zip: str | None = None,
 ):
     query = db.query(models.Restaurant)
     if name:
@@ -37,8 +37,8 @@ def list_restaurants(
         query = query.filter(models.Restaurant.cuisine_type.ilike(f"%{cuisine_type}%"))
     if city:
         query = query.filter(models.Restaurant.city.ilike(f"%{city}%"))
-    if zip_code:
-        query = query.filter(models.Restaurant.zip.ilike(f"%{zip_code}%"))
+    if zip:
+        query = query.filter(models.Restaurant.zip.ilike(f"%{zip}%"))
     if keyword:
         query = query.filter(
             or_(

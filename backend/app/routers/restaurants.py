@@ -20,7 +20,7 @@ def list_restaurants(
     cuisine_type: str | None = Query(default=None),
     keyword: str | None = Query(default=None),
     city: str | None = Query(default=None),
-    zip_code: str | None = Query(default=None),
+    zip: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     return crud.list_restaurants(
@@ -29,7 +29,7 @@ def list_restaurants(
         cuisine_type=cuisine_type,
         keyword=keyword,
         city=city,
-        zip_code=zip_code,
+        zip=zip,
     )
 
 @router.get("/{restaurant_id}", response_model=schemas.RestaurantOut)
