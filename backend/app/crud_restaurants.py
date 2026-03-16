@@ -1,7 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from fastapi import HTTPException, status
-
 from . import models, schemas
 
 def create_restaurant(db: Session, user_id: int, payload: schemas.RestaurantCreate):
