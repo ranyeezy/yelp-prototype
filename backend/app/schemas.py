@@ -99,3 +99,54 @@ class UserPreferencesOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+#restaunrant
+class RestaurantCreate(BaseModel):
+    name: str
+    cuisine_type: str
+    address: str
+    city: str
+    state: Optional[str] = None
+    zip: Optional[str] = None
+    country: Optional[str] = None
+    description: Optional[str] = None
+    phone: Optional[str] = None
+    price_tier: Optional[int] = None
+    hours: Optional[str] = None
+    amenities: Optional[str] = None
+
+class RestaurantUpdate(BaseModel):
+    name: Optional[str] = None
+    cuisine_type: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip: Optional[str] = None
+    country: Optional[str] = None
+    description: Optional[str] = None
+    phone: Optional[str] = None
+    price_tier: Optional[int] = None
+    hours: Optional[str] = None
+    amenities: Optional[str] = None
+
+class RestaurantOut(BaseModel):
+    id: int
+    name: str
+    cuisine_type: str
+    address: str
+    city: str
+    state: Optional[str] = None
+    zip: Optional[str] = None
+    country: Optional[str] = None
+    description: Optional[str] = None
+    phone: Optional[str] = None
+    price_tier: Optional[int] = None
+    hours: Optional[str] = None
+    amenities: Optional[str] = None
+    listed_by_user_id: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+        
