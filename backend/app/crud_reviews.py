@@ -77,3 +77,27 @@ def update_review(db: Session, review: models.Review, payload: schemas.ReviewUpd
 def delete_review(db: Session, review: models.Review):
     db.delete(review)
     db.commit()
+
+
+def list_reviews_for_user(db: Session, user_id: int):
+    rows = (
+        db.query(models.Review, models.Restaurant)
+        .join(models.Restaurant, models.Review.restaurant_id == models.Restaurant.id)
+        .filter(models.Review.user_id == user_id)
+        .order_by(models.Review.created_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": review.id,
+            "restaurant_id": restaurant.id,
+            "restaurant_name": restaurant.name,
+            "restaurant_city": restaurant.city,
+            "rating": review.rating,
+            "comment": review.comment,
+            "created_at": review.created_at,
+            "updated_at": review.updated_at,
+        }
+        for review, restaurant in rows
+    ]

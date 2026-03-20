@@ -25,6 +25,14 @@ def list_reviews_for_restaurant(
     return crud.list_reviews_for_restaurant(db, restaurant_id)
 
 
+@router.get("/me", response_model=list[schemas.UserReviewHistoryOut])
+def list_my_reviews(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return crud.list_reviews_for_user(db, current_user.id)
+
+
 @router.put("/{review_id}", response_model=schemas.ReviewOut)
 def update_review(
     review_id: int,
