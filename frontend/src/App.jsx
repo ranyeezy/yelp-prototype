@@ -9,13 +9,29 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null)
   const [authMessage, setAuthMessage] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
+  const [profileForm, setProfileForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    about_me: '',
+    city: '',
+    state: '',
+    country: '',
+    languages: '',
+    gender: '',
+    profile_photo: '',
+  })
+  const [profileMessage, setProfileMessage] = useState('')
+  const [profileSaving, setProfileSaving] = useState(false)
 
   const [ownerAuthMode, setOwnerAuthMode] = useState('login')
-  const [ownerForm, setOwnerForm] = useState({ name: '', email: '', password: '' })
+  const [ownerForm, setOwnerForm] = useState({ name: '', email: '', password: '', restaurant_location: '' })
   const [ownerToken, setOwnerToken] = useState('')
   const [currentOwner, setCurrentOwner] = useState(null)
   const [ownerMessage, setOwnerMessage] = useState('')
   const [ownerAuthLoading, setOwnerAuthLoading] = useState(false)
+  const [ownerProfileForm, setOwnerProfileForm] = useState({ name: '', email: '', restaurant_location: '' })
+  const [ownerProfileSaving, setOwnerProfileSaving] = useState(false)
   const [ownerClaimRestaurantId, setOwnerClaimRestaurantId] = useState('')
   const [ownerRestaurants, setOwnerRestaurants] = useState([])
   const [ownerDashboard, setOwnerDashboard] = useState(null)
@@ -60,6 +76,7 @@ function App() {
 
   const [activeRestaurantId, setActiveRestaurantId] = useState(null)
   const [reviews, setReviews] = useState([])
+  const [myReviewHistory, setMyReviewHistory] = useState([])
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' })
   const [reviewMessage, setReviewMessage] = useState('')
   const [reviewSaving, setReviewSaving] = useState(false)
@@ -70,6 +87,8 @@ function App() {
   const [aiFilters, setAiFilters] = useState(null)
   const [aiMessage, setAiMessage] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+
+  const countryOptions = ['United States', 'Canada', 'Mexico', 'India', 'United Kingdom', 'Other']
 
   const activeRestaurant = useMemo(
     () => restaurants.find((restaurant) => restaurant.id === activeRestaurantId) ?? null,
@@ -237,6 +256,19 @@ function App() {
     }
   }, [apiRequest])
 
+  const loadMyReviewHistory = useCallback(async () => {
+    if (!token) {
+      setMyReviewHistory([])
+      return
+    }
+    try {
+      const data = await apiRequest('/reviews/me', { method: 'GET' })
+      setMyReviewHistory(data)
+    } catch {
+      setMyReviewHistory([])
+    }
+  }, [token, apiRequest])
+
   useEffect(() => {
     loadRestaurants()
   }, [loadRestaurants])
@@ -248,6 +280,10 @@ function App() {
   }, [loadCurrentUser, loadFavorites, loadPreferences])
 
   useEffect(() => {
+    loadMyReviewHistory()
+  }, [loadMyReviewHistory])
+
+  useEffect(() => {
     loadMyListings()
   }, [loadMyListings])
 
@@ -257,8 +293,51 @@ function App() {
   }, [loadCurrentOwner, loadOwnerData])
 
   useEffect(() => {
+    if (!currentOwner) {
+      setOwnerProfileForm({ name: '', email: '', restaurant_location: '' })
+      return
+    }
+    setOwnerProfileForm({
+      name: currentOwner.name ?? '',
+      email: currentOwner.email ?? '',
+      restaurant_location: currentOwner.restaurant_location ?? '',
+    })
+  }, [currentOwner])
+
+  useEffect(() => {
     loadReviews(activeRestaurantId)
   }, [activeRestaurantId, loadReviews])
+
+  useEffect(() => {
+    if (!currentUser) {
+      setProfileForm({
+        name: '',
+        email: '',
+        phone: '',
+        about_me: '',
+        city: '',
+        state: '',
+        country: '',
+        languages: '',
+        gender: '',
+        profile_photo: '',
+      })
+      return
+    }
+
+    setProfileForm({
+      name: currentUser.name ?? '',
+      email: currentUser.email ?? '',
+      phone: currentUser.phone ?? '',
+      about_me: currentUser.about_me ?? '',
+      city: currentUser.city ?? '',
+      state: currentUser.state ?? '',
+      country: currentUser.country ?? '',
+      languages: currentUser.languages ?? '',
+      gender: currentUser.gender ?? '',
+      profile_photo: currentUser.profile_photo ?? '',
+    })
+  }, [currentUser])
 
   const onAuthSubmit = async (event) => {
     event.preventDefault()
@@ -309,6 +388,47 @@ function App() {
       setFavoritesMessage(error.message)
     } finally {
       setFavoriteActionId(null)
+    }
+  }
+
+  const saveProfile = async (event) => {
+    event.preventDefault()
+    setProfileMessage('')
+
+    if (!token) {
+      setProfileMessage('Please login to update profile.')
+      return
+    }
+
+    const normalizedState = profileForm.state.trim().toUpperCase()
+    if (normalizedState && normalizedState.length !== 2) {
+      setProfileMessage('State must be a 2-letter abbreviation.')
+      return
+    }
+
+    setProfileSaving(true)
+    try {
+      const updated = await apiRequest('/users/me', {
+        method: 'PUT',
+        body: JSON.stringify({
+          ...profileForm,
+          state: normalizedState || null,
+          phone: profileForm.phone || null,
+          about_me: profileForm.about_me || null,
+          city: profileForm.city || null,
+          country: profileForm.country || null,
+          languages: profileForm.languages || null,
+          gender: profileForm.gender || null,
+          profile_photo: profileForm.profile_photo || null,
+        }),
+        headers: {},
+      })
+      setCurrentUser(updated)
+      setProfileMessage('Profile updated successfully.')
+    } catch (error) {
+      setProfileMessage(error.message)
+    } finally {
+      setProfileSaving(false)
     }
   }
 
@@ -504,6 +624,7 @@ function App() {
   const logout = () => {
     setToken('')
     setCurrentUser(null)
+    setMyReviewHistory([])
     setAuthMessage('Logged out.')
   }
 
@@ -570,6 +691,36 @@ function App() {
     setOwnerRestaurants([])
     setOwnerDashboard(null)
     setOwnerMessage('Owner logged out.')
+  }
+
+  const saveOwnerProfile = async (event) => {
+    event.preventDefault()
+    setOwnerMessage('')
+
+    if (!ownerToken) {
+      setOwnerMessage('Owner login required to update profile.')
+      return
+    }
+
+    setOwnerProfileSaving(true)
+    try {
+      const updated = await apiRequest('/owners/me', {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: ownerProfileForm.name,
+          email: ownerProfileForm.email,
+          restaurant_location: ownerProfileForm.restaurant_location || null,
+        }),
+        headers: {},
+        authToken: ownerToken,
+      })
+      setCurrentOwner(updated)
+      setOwnerMessage('Owner profile updated successfully.')
+    } catch (error) {
+      setOwnerMessage(error.message)
+    } finally {
+      setOwnerProfileSaving(false)
+    }
   }
 
   const submitAiMessage = async (event) => {
@@ -644,6 +795,84 @@ function App() {
           <span className="status-chip">User: {currentUser ? 'Connected' : 'Guest'}</span>
           <span className="status-chip">Owner: {currentOwner ? 'Connected' : 'Guest'}</span>
         </div>
+      </section>
+
+      <section className="panel">
+        <h2>User Profile</h2>
+        <form onSubmit={saveProfile} className="stack">
+          <div className="row wrap">
+            <input
+              placeholder="Name"
+              value={profileForm.name}
+              onChange={(event) => setProfileForm((prev) => ({ ...prev, name: event.target.value }))}
+              disabled={!token}
+            />
+            <input
+              placeholder="Email"
+              type="email"
+              value={profileForm.email}
+              onChange={(event) => setProfileForm((prev) => ({ ...prev, email: event.target.value }))}
+              disabled={!token}
+            />
+            <input
+              placeholder="Phone"
+              value={profileForm.phone}
+              onChange={(event) => setProfileForm((prev) => ({ ...prev, phone: event.target.value }))}
+              disabled={!token}
+            />
+            <input
+              placeholder="City"
+              value={profileForm.city}
+              onChange={(event) => setProfileForm((prev) => ({ ...prev, city: event.target.value }))}
+              disabled={!token}
+            />
+            <input
+              placeholder="State (2-letter)"
+              value={profileForm.state}
+              maxLength={2}
+              onChange={(event) => setProfileForm((prev) => ({ ...prev, state: event.target.value.toUpperCase() }))}
+              disabled={!token}
+            />
+            <select
+              value={profileForm.country}
+              onChange={(event) => setProfileForm((prev) => ({ ...prev, country: event.target.value }))}
+              disabled={!token}
+            >
+              <option value="">Country</option>
+              {countryOptions.map((country) => (
+                <option key={country} value={country}>{country}</option>
+              ))}
+            </select>
+            <input
+              placeholder="Languages"
+              value={profileForm.languages}
+              onChange={(event) => setProfileForm((prev) => ({ ...prev, languages: event.target.value }))}
+              disabled={!token}
+            />
+            <input
+              placeholder="Gender"
+              value={profileForm.gender}
+              onChange={(event) => setProfileForm((prev) => ({ ...prev, gender: event.target.value }))}
+              disabled={!token}
+            />
+            <input
+              placeholder="Profile photo URL"
+              value={profileForm.profile_photo}
+              onChange={(event) => setProfileForm((prev) => ({ ...prev, profile_photo: event.target.value }))}
+              disabled={!token}
+            />
+          </div>
+          <textarea
+            placeholder="About me"
+            value={profileForm.about_me}
+            onChange={(event) => setProfileForm((prev) => ({ ...prev, about_me: event.target.value }))}
+            disabled={!token}
+          />
+          <button type="submit" disabled={!token || profileSaving}>
+            {profileSaving ? 'Saving...' : 'Save Profile'}
+          </button>
+        </form>
+        {profileMessage && <p className="info">{profileMessage}</p>}
       </section>
 
       <section className="panel">
@@ -766,6 +995,13 @@ function App() {
                 required
               />
             )}
+            {ownerAuthMode === 'signup' && (
+              <input
+                value={ownerForm.restaurant_location}
+                onChange={(event) => setOwnerForm((prev) => ({ ...prev, restaurant_location: event.target.value }))}
+                placeholder="Primary restaurant location"
+              />
+            )}
             <input
               value={ownerForm.email}
               onChange={(event) => setOwnerForm((prev) => ({ ...prev, email: event.target.value }))}
@@ -803,6 +1039,32 @@ function App() {
           {currentOwner && <p className="success">Owner logged in as: {currentOwner.name}</p>}
           {ownerMessage && <p className="info">{ownerMessage}</p>}
 
+          {ownerToken && (
+            <form onSubmit={saveOwnerProfile} className="stack">
+              <div className="row wrap">
+                <input
+                  value={ownerProfileForm.name}
+                  onChange={(event) => setOwnerProfileForm((prev) => ({ ...prev, name: event.target.value }))}
+                  placeholder="Owner name"
+                />
+                <input
+                  value={ownerProfileForm.email}
+                  onChange={(event) => setOwnerProfileForm((prev) => ({ ...prev, email: event.target.value }))}
+                  placeholder="Owner email"
+                  type="email"
+                />
+                <input
+                  value={ownerProfileForm.restaurant_location}
+                  onChange={(event) => setOwnerProfileForm((prev) => ({ ...prev, restaurant_location: event.target.value }))}
+                  placeholder="Restaurant location"
+                />
+                <button type="submit" disabled={ownerProfileSaving}>
+                  {ownerProfileSaving ? 'Saving...' : 'Save Owner Profile'}
+                </button>
+              </div>
+            </form>
+          )}
+
           {ownerDashboard && (
             <div className="stats-grid">
               <article className="metric-card">
@@ -822,6 +1084,17 @@ function App() {
 
           {ownerToken && ownerRestaurants.length === 0 && (
             <p className="info">No claimed restaurants yet. Claim one from the Restaurants section.</p>
+          )}
+
+          {ownerDashboard?.recent_reviews?.length > 0 && (
+            <div className="list">
+              {ownerDashboard.recent_reviews.map((item) => (
+                <article key={`owner-review-${item.review_id}`} className="card">
+                  <p><strong>{item.restaurant_name}</strong> • {item.rating}/5</p>
+                  <p>{item.comment || 'No comment'}</p>
+                </article>
+              ))}
+            </div>
           )}
         </section>
       </div>
@@ -921,6 +1194,21 @@ function App() {
                   </div>
                 </>
               )}
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <h2>My Review History</h2>
+        {token && myReviewHistory.length === 0 && <p className="info">No past reviews yet.</p>}
+        {!token && <p className="info">Login to view your review history.</p>}
+        <div className="list">
+          {myReviewHistory.map((item) => (
+            <article key={`history-${item.id}`} className="card">
+              <p><strong>{item.restaurant_name}</strong> ({item.restaurant_city || 'N/A'})</p>
+              <p>Rating: {item.rating}/5</p>
+              <p>{item.comment || 'No comment'}</p>
             </article>
           ))}
         </div>
