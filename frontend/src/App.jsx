@@ -9,6 +9,15 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null)
   const [authMessage, setAuthMessage] = useState('')
 
+  const [ownerAuthMode, setOwnerAuthMode] = useState('login')
+  const [ownerForm, setOwnerForm] = useState({ name: '', email: '', password: '' })
+  const [ownerToken, setOwnerToken] = useState('')
+  const [currentOwner, setCurrentOwner] = useState(null)
+  const [ownerMessage, setOwnerMessage] = useState('')
+  const [ownerClaimRestaurantId, setOwnerClaimRestaurantId] = useState('')
+  const [ownerRestaurants, setOwnerRestaurants] = useState([])
+  const [ownerDashboard, setOwnerDashboard] = useState(null)
+
   const [restaurantQuery, setRestaurantQuery] = useState({ keyword: '', city: '', cuisine_type: '' })
   const [restaurants, setRestaurants] = useState([])
   const [restaurantsMessage, setRestaurantsMessage] = useState('')
@@ -28,17 +37,20 @@ function App() {
   )
 
   const apiRequest = async (path, options = {}) => {
+    const { authToken, ...fetchOptions } = options
     const headers = {
       'Content-Type': 'application/json',
-      ...(options.headers ?? {}),
+      ...(fetchOptions.headers ?? {}),
     }
 
-    if (token) {
-      headers.Authorization = `Bearer ${token}`
+    const hasAuthTokenOverride = Object.prototype.hasOwnProperty.call(options, 'authToken')
+    const resolvedToken = hasAuthTokenOverride ? authToken : token
+    if (resolvedToken) {
+      headers.Authorization = `Bearer ${resolvedToken}`
     }
 
     const response = await fetch(`${apiBaseUrl}${path}`, {
-      ...options,
+      ...fetchOptions,
       headers,
     })
 
@@ -61,6 +73,36 @@ function App() {
       setCurrentUser(user)
     } catch {
       setCurrentUser(null)
+    }
+  }
+
+  const loadCurrentOwner = async () => {
+    if (!ownerToken) return
+    try {
+      const owner = await apiRequest('/owners/me', { authToken: ownerToken })
+      setCurrentOwner(owner)
+    } catch {
+      setCurrentOwner(null)
+    }
+  }
+
+  const loadOwnerData = async () => {
+    if (!ownerToken) {
+      setOwnerRestaurants([])
+      setOwnerDashboard(null)
+      return
+    }
+
+    try {
+      const [restaurantsData, dashboardData] = await Promise.all([
+        apiRequest('/owners/restaurants', { authToken: ownerToken }),
+        apiRequest('/owners/dashboard', { authToken: ownerToken }),
+      ])
+      setOwnerRestaurants(restaurantsData)
+      setOwnerDashboard(dashboardData)
+    } catch {
+      setOwnerRestaurants([])
+      setOwnerDashboard(null)
     }
   }
 
@@ -118,6 +160,11 @@ function App() {
     loadCurrentUser()
     loadFavorites()
   }, [token])
+
+  useEffect(() => {
+    loadCurrentOwner()
+    loadOwnerData()
+  }, [ownerToken])
 
   useEffect(() => {
     loadReviews(activeRestaurantId)
@@ -207,6 +254,68 @@ function App() {
     setAuthMessage('Logged out.')
   }
 
+  const onOwnerAuthSubmit = async (event) => {
+    event.preventDefault()
+    setOwnerMessage('')
+    try {
+      if (ownerAuthMode === 'signup') {
+        await apiRequest('/auth/owners/signup', {
+          method: 'POST',
+          body: JSON.stringify(ownerForm),
+          headers: {},
+          authToken: '',
+        })
+      }
+
+      const loginData = await apiRequest('/auth/owners/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: ownerForm.email,
+          password: ownerForm.password,
+        }),
+        headers: {},
+        authToken: '',
+      })
+
+      setOwnerToken(loginData.access_token)
+      setOwnerMessage('Owner authenticated successfully.')
+    } catch (error) {
+      setOwnerMessage(error.message)
+    }
+  }
+
+  const claimRestaurantForOwner = async (restaurantId) => {
+    setOwnerMessage('')
+    if (!ownerToken) {
+      setOwnerMessage('Owner login required to claim restaurants.')
+      return
+    }
+    if (!Number.isInteger(restaurantId) || restaurantId <= 0) {
+      setOwnerMessage('Please enter a valid restaurant ID.')
+      return
+    }
+    try {
+      await apiRequest(`/owners/restaurants/${restaurantId}/claim`, {
+        method: 'POST',
+        headers: {},
+        authToken: ownerToken,
+      })
+      setOwnerMessage('Restaurant claimed successfully.')
+      setOwnerClaimRestaurantId('')
+      await loadOwnerData()
+    } catch (error) {
+      setOwnerMessage(error.message)
+    }
+  }
+
+  const ownerLogout = () => {
+    setOwnerToken('')
+    setCurrentOwner(null)
+    setOwnerRestaurants([])
+    setOwnerDashboard(null)
+    setOwnerMessage('Owner logged out.')
+  }
+
   return (
     <div className="app-shell">
       <header>
@@ -271,6 +380,80 @@ function App() {
       </section>
 
       <section className="panel">
+        <h2>Owner Portal</h2>
+        <div className="row wrap">
+          <button className={ownerAuthMode === 'login' ? 'active' : ''} onClick={() => setOwnerAuthMode('login')}>
+            Owner Login
+          </button>
+          <button className={ownerAuthMode === 'signup' ? 'active' : ''} onClick={() => setOwnerAuthMode('signup')}>
+            Owner Sign Up
+          </button>
+          {ownerToken && <button onClick={ownerLogout}>Owner Logout</button>}
+          {ownerToken && <button onClick={loadOwnerData}>Refresh Dashboard</button>}
+        </div>
+
+        <form onSubmit={onOwnerAuthSubmit} className="stack">
+          {ownerAuthMode === 'signup' && (
+            <input
+              value={ownerForm.name}
+              onChange={(event) => setOwnerForm((prev) => ({ ...prev, name: event.target.value }))}
+              placeholder="Owner full name"
+              required
+            />
+          )}
+          <input
+            value={ownerForm.email}
+            onChange={(event) => setOwnerForm((prev) => ({ ...prev, email: event.target.value }))}
+            placeholder="Owner email"
+            type="email"
+            required
+          />
+          <input
+            value={ownerForm.password}
+            onChange={(event) => setOwnerForm((prev) => ({ ...prev, password: event.target.value }))}
+            placeholder="Owner password"
+            type="password"
+            required
+          />
+          <button type="submit">{ownerAuthMode === 'signup' ? 'Create Owner + Login' : 'Owner Login'}</button>
+        </form>
+
+        <div className="row wrap">
+          <input
+            value={ownerClaimRestaurantId}
+            onChange={(event) => setOwnerClaimRestaurantId(event.target.value)}
+            placeholder="Restaurant ID to claim"
+          />
+          <button onClick={() => claimRestaurantForOwner(Number(ownerClaimRestaurantId))}>
+            Claim by ID
+          </button>
+        </div>
+
+        {currentOwner && <p className="success">Owner logged in as: {currentOwner.name}</p>}
+        {ownerMessage && <p className="info">{ownerMessage}</p>}
+
+        {ownerDashboard && (
+          <div className="card">
+            <h3>Owner Dashboard</h3>
+            <p>Claimed Restaurants: {ownerDashboard.claimed_restaurants}</p>
+            <p>Total Reviews: {ownerDashboard.total_reviews}</p>
+            <p>Average Rating: {ownerDashboard.avg_rating ?? 'N/A'}</p>
+          </div>
+        )}
+
+        <div className="list">
+          {ownerRestaurants.map((restaurant) => (
+            <article key={restaurant.id} className="card">
+              <h3>{restaurant.name}</h3>
+              <p>{restaurant.cuisine_type} • {restaurant.city}</p>
+              <p>Avg Rating: {restaurant.avg_rating ?? 'N/A'}</p>
+              <p>Review Count: {restaurant.review_count}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
         <h2>Restaurants</h2>
         <div className="row wrap">
           <input
@@ -307,6 +490,9 @@ function App() {
                 </button>
                 <button onClick={() => toggleFavorite(restaurant.id)}>
                   {favoriteRestaurantIds.has(restaurant.id) ? 'Unfavorite' : 'Favorite'}
+                </button>
+                <button onClick={() => claimRestaurantForOwner(restaurant.id)}>
+                  Claim (Owner)
                 </button>
               </div>
             </article>
