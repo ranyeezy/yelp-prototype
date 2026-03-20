@@ -1,0 +1,56 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from .. import crud_reviews as crud
+from .. import schemas
+from ..deps import get_current_user, get_db
+
+router = APIRouter(prefix="/reviews", tags=["reviews"])
+
+
+@router.post("", response_model=schemas.ReviewOut, status_code=201)
+def create_review(
+    payload: schemas.ReviewCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return crud.create_review(db, current_user.id, payload)
+
+
+@router.get("/restaurant/{restaurant_id}", response_model=list[schemas.ReviewOut])
+def list_reviews_for_restaurant(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+):
+    return crud.list_reviews_for_restaurant(db, restaurant_id)
+
+
+@router.put("/{review_id}", response_model=schemas.ReviewOut)
+def update_review(
+    review_id: int,
+    payload: schemas.ReviewUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    review = crud.get_review(db, review_id)
+    if review.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own review",
+        )
+    return crud.update_review(db, review, payload)
+
+
+@router.delete("/{review_id}", status_code=204)
+def delete_review(
+    review_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    review = crud.get_review(db, review_id)
+    if review.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete your own review",
+        )
+    crud.delete_review(db, review)

@@ -151,6 +151,31 @@ class RestaurantOut(BaseModel):
         from_attributes = True
 
 
+# review
+class ReviewCreate(BaseModel):
+    restaurant_id: int
+    rating: int = Field(ge=1, le=5)
+    comment: Optional[str] = None
+
+
+class ReviewUpdate(BaseModel):
+    rating: Optional[int] = Field(default=None, ge=1, le=5)
+    comment: Optional[str] = None
+
+
+class ReviewOut(BaseModel):
+    id: int
+    user_id: int
+    restaurant_id: int
+    rating: int
+    comment: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # Q11 - AI assistant chatbot
 class ChatMessage(BaseModel):
     role: str
