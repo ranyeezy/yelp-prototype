@@ -149,4 +149,30 @@ class RestaurantOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# Q11 - AI assistant chatbot
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class AIChatRequest(BaseModel):
+    message: str = Field(min_length=1)
+    conversation_history: list[ChatMessage] = Field(default_factory=list)
+
+
+class RecommendedRestaurant(BaseModel):
+    id: int
+    name: str
+    cuisine_type: str
+    city: str
+    price_tier: Optional[int] = None
+    score: float
+
+
+class AIChatResponse(BaseModel):
+    reply: str
+    extracted_filters: dict
+    recommendations: list[RecommendedRestaurant]
         
