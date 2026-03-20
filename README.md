@@ -29,6 +29,31 @@ uvicorn app.main:app --reload
 - Swagger: `http://127.0.0.1:8000/docs`
 - ReDoc: `http://127.0.0.1:8000/redoc`
 
+## Frontend setup
+
+1) Install dependencies:
+
+```bash
+cd frontend
+npm install
+```
+
+2) Run the app:
+
+```bash
+npm run dev
+```
+
+3) Build verification:
+
+```bash
+npm run build
+```
+
+4) In the UI, set API base URL to:
+
+- `http://127.0.0.1:8000`
+
 ## Implemented API routes
 
 ### Auth
@@ -144,3 +169,9 @@ uvicorn app.main:app --reload
 - Reviews create/list
 - Owner login, claim restaurant, dashboard view
 - AI assistant chat recommendations
+
+## Current implementation status
+
+- Backend APIs for auth, users/owners, restaurants, reviews, favorites, preferences, owner analytics, and AI assistant are implemented.
+- Frontend includes user and owner authentication, restaurant discovery, listing management, favorites, reviews, preferences, and AI chat flows.
+- UI has responsive Yelp-inspired styling and includes lab pair attribution in the dashboard.
