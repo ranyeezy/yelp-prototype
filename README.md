@@ -26,6 +26,7 @@ Create `backend/.env`:
 ```env
 DATABASE_URL=mysql+pymysql://<user>:<password>@<host>:<port>/<db_name>
 JWT_SECRET=<long-random-secret>
+TAVILY_API_KEY=<optional-for-web-context-enrichment>
 ```
 
 Install dependencies:
@@ -110,6 +111,7 @@ npm run build
 ### Reviews
 - `POST /reviews`
 - `GET /reviews/restaurant/{restaurant_id}`
+- `GET /reviews/me`
 - `PUT /reviews/{review_id}`
 - `DELETE /reviews/{review_id}`
 
@@ -183,6 +185,7 @@ npm run build
 
 - Backend dependencies are pinned in `backend/requirements.txt`.
 - Database tables auto-create on app startup via SQLAlchemy metadata.
+- AI endpoint includes LangChain-based filter parsing and optional Tavily web context when `TAVILY_API_KEY` is configured.
 
 ## Frontend demo flows
 
