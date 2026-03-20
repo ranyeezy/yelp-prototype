@@ -40,6 +40,18 @@ function App() {
   const [favoriteRestaurantIds, setFavoriteRestaurantIds] = useState(new Set())
   const [favoritesMessage, setFavoritesMessage] = useState('')
 
+  const [preferencesForm, setPreferencesForm] = useState({
+    cuisines: '',
+    price_min: '',
+    price_max: '',
+    preferred_locations: '',
+    search_radius: '',
+    dietary_needs: '',
+    ambiance: '',
+    sort_preference: '',
+  })
+  const [preferencesMessage, setPreferencesMessage] = useState('')
+
   const [activeRestaurantId, setActiveRestaurantId] = useState(null)
   const [reviews, setReviews] = useState([])
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' })
@@ -160,6 +172,38 @@ function App() {
     }
   }
 
+  const loadPreferences = async () => {
+    if (!token) {
+      setPreferencesForm({
+        cuisines: '',
+        price_min: '',
+        price_max: '',
+        preferred_locations: '',
+        search_radius: '',
+        dietary_needs: '',
+        ambiance: '',
+        sort_preference: '',
+      })
+      return
+    }
+
+    try {
+      const data = await apiRequest('/preferences/me', { method: 'GET' })
+      setPreferencesForm({
+        cuisines: data.cuisines ?? '',
+        price_min: data.price_min ?? '',
+        price_max: data.price_max ?? '',
+        preferred_locations: data.preferred_locations ?? '',
+        search_radius: data.search_radius ?? '',
+        dietary_needs: data.dietary_needs ?? '',
+        ambiance: data.ambiance ?? '',
+        sort_preference: data.sort_preference ?? '',
+      })
+    } catch {
+      setPreferencesMessage('Unable to load preferences right now.')
+    }
+  }
+
   const loadMyListings = async () => {
     if (!token || !currentUser) {
       setMyListings([])
@@ -193,6 +237,7 @@ function App() {
   useEffect(() => {
     loadCurrentUser()
     loadFavorites()
+    loadPreferences()
   }, [token])
 
   useEffect(() => {
@@ -283,6 +328,35 @@ function App() {
       await loadReviews(activeRestaurantId)
     } catch (error) {
       setReviewMessage(error.message)
+    }
+  }
+
+  const savePreferences = async (event) => {
+    event.preventDefault()
+    setPreferencesMessage('')
+    if (!token) {
+      setPreferencesMessage('Please login to update preferences.')
+      return
+    }
+
+    try {
+      await apiRequest('/preferences/me', {
+        method: 'PUT',
+        body: JSON.stringify({
+          cuisines: preferencesForm.cuisines || null,
+          price_min: preferencesForm.price_min ? Number(preferencesForm.price_min) : null,
+          price_max: preferencesForm.price_max ? Number(preferencesForm.price_max) : null,
+          preferred_locations: preferencesForm.preferred_locations || null,
+          search_radius: preferencesForm.search_radius ? Number(preferencesForm.search_radius) : null,
+          dietary_needs: preferencesForm.dietary_needs || null,
+          ambiance: preferencesForm.ambiance || null,
+          sort_preference: preferencesForm.sort_preference || null,
+        }),
+        headers: {},
+      })
+      setPreferencesMessage('Preferences saved successfully.')
+    } catch (error) {
+      setPreferencesMessage(error.message)
     }
   }
 
@@ -511,6 +585,59 @@ function App() {
           <span className="status-chip">User: {currentUser ? 'Connected' : 'Guest'}</span>
           <span className="status-chip">Owner: {currentOwner ? 'Connected' : 'Guest'}</span>
         </div>
+      </section>
+
+      <section className="panel">
+        <h2>User Preferences</h2>
+        <form onSubmit={savePreferences} className="stack">
+          <div className="row wrap">
+            <input
+              placeholder="Preferred cuisines (comma-separated)"
+              value={preferencesForm.cuisines}
+              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, cuisines: event.target.value }))}
+            />
+            <input
+              placeholder="Price min (1-4)"
+              value={preferencesForm.price_min}
+              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, price_min: event.target.value }))}
+            />
+            <input
+              placeholder="Price max (1-4)"
+              value={preferencesForm.price_max}
+              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, price_max: event.target.value }))}
+            />
+            <input
+              placeholder="Preferred locations"
+              value={preferencesForm.preferred_locations}
+              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, preferred_locations: event.target.value }))}
+            />
+            <input
+              placeholder="Search radius"
+              value={preferencesForm.search_radius}
+              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, search_radius: event.target.value }))}
+            />
+            <input
+              placeholder="Dietary needs"
+              value={preferencesForm.dietary_needs}
+              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, dietary_needs: event.target.value }))}
+            />
+            <input
+              placeholder="Ambiance"
+              value={preferencesForm.ambiance}
+              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, ambiance: event.target.value }))}
+            />
+            <input
+              placeholder="Sort preference"
+              value={preferencesForm.sort_preference}
+              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, sort_preference: event.target.value }))}
+            />
+          </div>
+          <div className="row wrap">
+            <button type="submit">Save Preferences</button>
+            <button type="button" onClick={loadPreferences}>Reload Preferences</button>
+          </div>
+        </form>
+        {preferencesMessage && <p className="info">{preferencesMessage}</p>}
       </section>
 
       <div className="two-col">
