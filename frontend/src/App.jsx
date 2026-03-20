@@ -22,6 +22,20 @@ function App() {
   const [restaurants, setRestaurants] = useState([])
   const [restaurantsMessage, setRestaurantsMessage] = useState('')
   const [loadingRestaurants, setLoadingRestaurants] = useState(false)
+  const [myListings, setMyListings] = useState([])
+  const [listingMessage, setListingMessage] = useState('')
+  const [listingForm, setListingForm] = useState({
+    name: '',
+    cuisine_type: '',
+    address: '',
+    city: '',
+    state: '',
+    zip: '',
+    description: '',
+    price_tier: '',
+  })
+  const [editingListingId, setEditingListingId] = useState(null)
+  const [editingListingForm, setEditingListingForm] = useState({ description: '', price_tier: '' })
 
   const [favoriteRestaurantIds, setFavoriteRestaurantIds] = useState(new Set())
   const [favoritesMessage, setFavoritesMessage] = useState('')
@@ -146,6 +160,19 @@ function App() {
     }
   }
 
+  const loadMyListings = async () => {
+    if (!token || !currentUser) {
+      setMyListings([])
+      return
+    }
+    try {
+      const allRestaurants = await apiRequest('/restaurants', { method: 'GET' })
+      setMyListings(allRestaurants.filter((restaurant) => restaurant.listed_by_user_id === currentUser.id))
+    } catch {
+      setMyListings([])
+    }
+  }
+
   const loadReviews = async (restaurantId) => {
     if (!restaurantId) {
       setReviews([])
@@ -167,6 +194,10 @@ function App() {
     loadCurrentUser()
     loadFavorites()
   }, [token])
+
+  useEffect(() => {
+    loadMyListings()
+  }, [token, currentUser])
 
   useEffect(() => {
     loadCurrentOwner()
@@ -252,6 +283,94 @@ function App() {
       await loadReviews(activeRestaurantId)
     } catch (error) {
       setReviewMessage(error.message)
+    }
+  }
+
+  const submitListing = async (event) => {
+    event.preventDefault()
+    setListingMessage('')
+
+    if (!token) {
+      setListingMessage('Please login to create a listing.')
+      return
+    }
+
+    try {
+      const payload = {
+        name: listingForm.name,
+        cuisine_type: listingForm.cuisine_type,
+        address: listingForm.address,
+        city: listingForm.city,
+        state: listingForm.state || null,
+        zip: listingForm.zip || null,
+        description: listingForm.description || null,
+        price_tier: listingForm.price_tier ? Number(listingForm.price_tier) : null,
+      }
+
+      await apiRequest('/restaurants', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: {},
+      })
+
+      setListingForm({
+        name: '',
+        cuisine_type: '',
+        address: '',
+        city: '',
+        state: '',
+        zip: '',
+        description: '',
+        price_tier: '',
+      })
+      setListingMessage('Restaurant listed successfully.')
+      await loadRestaurants()
+      await loadMyListings()
+    } catch (error) {
+      setListingMessage(error.message)
+    }
+  }
+
+  const startEditListing = (listing) => {
+    setEditingListingId(listing.id)
+    setEditingListingForm({
+      description: listing.description || '',
+      price_tier: listing.price_tier ?? '',
+    })
+  }
+
+  const saveListingEdit = async (listingId) => {
+    setListingMessage('')
+    try {
+      await apiRequest(`/restaurants/${listingId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          description: editingListingForm.description || null,
+          price_tier: editingListingForm.price_tier ? Number(editingListingForm.price_tier) : null,
+        }),
+        headers: {},
+      })
+      setEditingListingId(null)
+      setListingMessage('Listing updated successfully.')
+      await loadRestaurants()
+      await loadMyListings()
+    } catch (error) {
+      setListingMessage(error.message)
+    }
+  }
+
+  const deleteListing = async (listingId) => {
+    setListingMessage('')
+    try {
+      await apiRequest(`/restaurants/${listingId}`, { method: 'DELETE' })
+      setListingMessage('Listing removed successfully.')
+      if (activeRestaurantId === listingId) {
+        setActiveRestaurantId(null)
+      }
+      await loadRestaurants()
+      await loadMyListings()
+    } catch (error) {
+      setListingMessage(error.message)
     }
   }
 
@@ -498,6 +617,100 @@ function App() {
           )}
         </section>
       </div>
+
+      <section className="panel">
+        <h2>My Restaurant Listings</h2>
+        <form onSubmit={submitListing} className="stack">
+          <div className="row wrap">
+            <input
+              placeholder="Restaurant name"
+              value={listingForm.name}
+              onChange={(event) => setListingForm((prev) => ({ ...prev, name: event.target.value }))}
+              required
+            />
+            <input
+              placeholder="Cuisine"
+              value={listingForm.cuisine_type}
+              onChange={(event) => setListingForm((prev) => ({ ...prev, cuisine_type: event.target.value }))}
+              required
+            />
+            <input
+              placeholder="Address"
+              value={listingForm.address}
+              onChange={(event) => setListingForm((prev) => ({ ...prev, address: event.target.value }))}
+              required
+            />
+            <input
+              placeholder="City"
+              value={listingForm.city}
+              onChange={(event) => setListingForm((prev) => ({ ...prev, city: event.target.value }))}
+              required
+            />
+            <input
+              placeholder="State"
+              value={listingForm.state}
+              onChange={(event) => setListingForm((prev) => ({ ...prev, state: event.target.value }))}
+            />
+            <input
+              placeholder="Zip"
+              value={listingForm.zip}
+              onChange={(event) => setListingForm((prev) => ({ ...prev, zip: event.target.value }))}
+            />
+            <input
+              placeholder="Price tier (1-4)"
+              value={listingForm.price_tier}
+              onChange={(event) => setListingForm((prev) => ({ ...prev, price_tier: event.target.value }))}
+            />
+          </div>
+          <textarea
+            placeholder="Description"
+            value={listingForm.description}
+            onChange={(event) => setListingForm((prev) => ({ ...prev, description: event.target.value }))}
+          />
+          <button type="submit">Create Listing</button>
+        </form>
+        {listingMessage && <p className="info">{listingMessage}</p>}
+
+        <div className="restaurant-grid">
+          {myListings.map((listing) => (
+            <article key={`my-${listing.id}`} className="restaurant-card">
+              <div className="restaurant-head">
+                <h3>{listing.name}</h3>
+                <span className="chip">{listing.cuisine_type}</span>
+              </div>
+              <p className="muted">{listing.city}</p>
+
+              {editingListingId === listing.id ? (
+                <div className="stack">
+                  <textarea
+                    value={editingListingForm.description}
+                    onChange={(event) => setEditingListingForm((prev) => ({ ...prev, description: event.target.value }))}
+                    placeholder="Edit description"
+                  />
+                  <input
+                    value={editingListingForm.price_tier}
+                    onChange={(event) => setEditingListingForm((prev) => ({ ...prev, price_tier: event.target.value }))}
+                    placeholder="Edit price tier"
+                  />
+                  <div className="row wrap">
+                    <button onClick={() => saveListingEdit(listing.id)}>Save</button>
+                    <button onClick={() => setEditingListingId(null)}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {listing.description && <p>{listing.description}</p>}
+                  <p>Price Tier: {listing.price_tier ?? 'N/A'}</p>
+                  <div className="row wrap">
+                    <button onClick={() => startEditListing(listing)}>Edit</button>
+                    <button onClick={() => deleteListing(listing.id)}>Delete</button>
+                  </div>
+                </>
+              )}
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section className="panel">
         <h2>Restaurants</h2>
