@@ -1,58 +1,81 @@
 ## Yelp Prototype
 
-Backend API for a Yelp-style lab project using FastAPI + SQLAlchemy.
+Yelp-style full-stack lab project with:
 
-## Backend setup
+- FastAPI + SQLAlchemy backend
+- React + Vite frontend
+- JWT authentication for users and owners
+- Restaurant discovery, reviews, favorites, owner dashboard, and AI assistant
 
-1) Create `backend/.env` with:
+## Prerequisites
+
+- Python 3.10+
+- Node.js 18+
+- MySQL 8+ (or compatible MySQL server)
+
+## 1) Backend setup and run
+
+From the project root:
+
+```bash
+cd backend
+```
+
+Create `backend/.env`:
 
 ```env
 DATABASE_URL=mysql+pymysql://<user>:<password>@<host>:<port>/<db_name>
 JWT_SECRET=<long-random-secret>
 ```
 
-2) Install dependencies:
+Install dependencies:
 
 ```bash
-cd backend
 pip install -r requirements.txt
 ```
 
-3) Run server:
+Run the backend server:
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-4) Open docs:
+Backend should be available at:
 
+- API base: `http://127.0.0.1:8000`
 - Swagger: `http://127.0.0.1:8000/docs`
 - ReDoc: `http://127.0.0.1:8000/redoc`
 
-## Frontend setup
+## 2) Frontend setup and run
 
-1) Install dependencies:
+Open a new terminal from project root:
 
 ```bash
 cd frontend
 npm install
-```
-
-2) Run the app:
-
-```bash
 npm run dev
 ```
 
-3) Build verification:
+Frontend dev server runs at Vite's local URL (typically `http://127.0.0.1:5173` or `http://localhost:5173`).
+
+In the app UI, set API base URL to:
+
+- `http://127.0.0.1:8000`
+
+Optional production build check:
 
 ```bash
 npm run build
 ```
 
-4) In the UI, set API base URL to:
+## 3) Quick verification flow
 
-- `http://127.0.0.1:8000`
+1. Start backend (`uvicorn`) and confirm `GET /docs` loads.
+2. Start frontend (`npm run dev`) and open the Vite URL.
+3. Sign up/login as a user.
+4. Search restaurants, add favorites, and create a review.
+5. Login as an owner, claim a restaurant, and open owner dashboard.
+6. Open AI assistant and submit a recommendation query.
 
 ## Implemented API routes
 
@@ -158,8 +181,8 @@ npm run build
 
 ## Notes
 
-- Keep using `requirements.txt` as the backend dependency source for submission.
-- Tables auto-create on app startup via SQLAlchemy metadata.
+- Backend dependencies are pinned in `backend/requirements.txt`.
+- Database tables auto-create on app startup via SQLAlchemy metadata.
 
 ## Frontend demo flows
 
