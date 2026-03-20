@@ -73,6 +73,32 @@ class OwnerOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class OwnerClaimRestaurantOut(BaseModel):
+    id: int
+    owner_id: int
+    restaurant_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class OwnerRestaurantSummaryOut(BaseModel):
+    id: int
+    name: str
+    cuisine_type: str
+    city: str
+    avg_rating: Optional[float] = None
+    review_count: int
+
+
+class OwnerDashboardOut(BaseModel):
+    claimed_restaurants: int
+    total_reviews: int
+    avg_rating: Optional[float] = None
+    restaurants: list[OwnerRestaurantSummaryOut]
         
 #user preferences
 class UserPreferencesIn(BaseModel):

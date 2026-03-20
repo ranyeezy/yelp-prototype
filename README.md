@@ -43,6 +43,11 @@ uvicorn app.main:app --reload
 - `GET /owners/me`
 - `PUT /owners/me`
 
+### Owner restaurant management
+- `POST /owners/restaurants/{restaurant_id}/claim`
+- `GET /owners/restaurants`
+- `GET /owners/dashboard`
+
 ### Preferences
 - `GET /preferences/me`
 - `PUT /preferences/me`
@@ -110,6 +115,10 @@ uvicorn app.main:app --reload
 ### Add favorite
 
 `POST /favorites/1` (Bearer token required)
+
+### Owner claim a restaurant
+
+`POST /owners/restaurants/1/claim` (Owner Bearer token required)
 
 ### AI assistant chat
 

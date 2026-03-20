@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from ..deps import get_db, get_current_owner
 from .. import schemas
 from .. import crud_users_owners as crud
+from .. import crud_owner_restaurants as owner_crud
 
 router = APIRouter(prefix="/owners", tags=["owners"])
 
@@ -17,3 +18,28 @@ def update_me(
     current_owner=Depends(get_current_owner),
 ):
     return crud.update_owner(db, current_owner, payload)
+
+
+@router.post("/restaurants/{restaurant_id}/claim", response_model=schemas.OwnerClaimRestaurantOut, status_code=201)
+def claim_restaurant(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+    current_owner=Depends(get_current_owner),
+):
+    return owner_crud.claim_restaurant(db, current_owner.id, restaurant_id)
+
+
+@router.get("/restaurants", response_model=list[schemas.OwnerRestaurantSummaryOut])
+def list_my_restaurants(
+    db: Session = Depends(get_db),
+    current_owner=Depends(get_current_owner),
+):
+    return owner_crud.list_claimed_restaurants(db, current_owner.id)
+
+
+@router.get("/dashboard", response_model=schemas.OwnerDashboardOut)
+def owner_dashboard(
+    db: Session = Depends(get_db),
+    current_owner=Depends(get_current_owner),
+):
+    return owner_crud.get_owner_dashboard(db, current_owner.id)
