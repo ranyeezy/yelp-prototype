@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 
 function App() {
@@ -76,7 +76,7 @@ function App() {
     [restaurants, activeRestaurantId],
   )
 
-  const apiRequest = async (path, options = {}) => {
+  const apiRequest = useCallback(async (path, options = {}) => {
     const { authToken, ...fetchOptions } = options
     const headers = {
       'Content-Type': 'application/json',
@@ -104,9 +104,9 @@ function App() {
       throw new Error(typeof detail === 'string' ? detail : 'Request failed')
     }
     return data
-  }
+  }, [apiBaseUrl, token])
 
-  const loadCurrentUser = async () => {
+  const loadCurrentUser = useCallback(async () => {
     if (!token) return
     try {
       const user = await apiRequest('/users/me')
@@ -114,9 +114,9 @@ function App() {
     } catch {
       setCurrentUser(null)
     }
-  }
+  }, [token, apiRequest])
 
-  const loadCurrentOwner = async () => {
+  const loadCurrentOwner = useCallback(async () => {
     if (!ownerToken) return
     try {
       const owner = await apiRequest('/owners/me', { authToken: ownerToken })
@@ -124,9 +124,9 @@ function App() {
     } catch {
       setCurrentOwner(null)
     }
-  }
+  }, [ownerToken, apiRequest])
 
-  const loadOwnerData = async () => {
+  const loadOwnerData = useCallback(async () => {
     if (!ownerToken) {
       setOwnerRestaurants([])
       setOwnerDashboard(null)
@@ -144,9 +144,9 @@ function App() {
       setOwnerRestaurants([])
       setOwnerDashboard(null)
     }
-  }
+  }, [ownerToken, apiRequest])
 
-  const loadRestaurants = async () => {
+  const loadRestaurants = useCallback(async () => {
     setLoadingRestaurants(true)
     setRestaurantsMessage('')
     try {
@@ -164,9 +164,9 @@ function App() {
     } finally {
       setLoadingRestaurants(false)
     }
-  }
+  }, [restaurantQuery, apiRequest])
 
-  const loadFavorites = async () => {
+  const loadFavorites = useCallback(async () => {
     if (!token) {
       setFavoriteRestaurantIds(new Set())
       return
@@ -177,9 +177,9 @@ function App() {
     } catch {
       setFavoriteRestaurantIds(new Set())
     }
-  }
+  }, [token, apiRequest])
 
-  const loadPreferences = async () => {
+  const loadPreferences = useCallback(async () => {
     if (!token) {
       setPreferencesForm({
         cuisines: '',
@@ -209,9 +209,9 @@ function App() {
     } catch {
       setPreferencesMessage('Unable to load preferences right now.')
     }
-  }
+  }, [token, apiRequest])
 
-  const loadMyListings = async () => {
+  const loadMyListings = useCallback(async () => {
     if (!token || !currentUser) {
       setMyListings([])
       return
@@ -222,9 +222,9 @@ function App() {
     } catch {
       setMyListings([])
     }
-  }
+  }, [token, currentUser, apiRequest])
 
-  const loadReviews = async (restaurantId) => {
+  const loadReviews = useCallback(async (restaurantId) => {
     if (!restaurantId) {
       setReviews([])
       return
@@ -235,30 +235,30 @@ function App() {
     } catch {
       setReviews([])
     }
-  }
+  }, [apiRequest])
 
   useEffect(() => {
     loadRestaurants()
-  }, [])
+  }, [loadRestaurants])
 
   useEffect(() => {
     loadCurrentUser()
     loadFavorites()
     loadPreferences()
-  }, [token])
+  }, [loadCurrentUser, loadFavorites, loadPreferences])
 
   useEffect(() => {
     loadMyListings()
-  }, [token, currentUser])
+  }, [loadMyListings])
 
   useEffect(() => {
     loadCurrentOwner()
     loadOwnerData()
-  }, [ownerToken])
+  }, [loadCurrentOwner, loadOwnerData])
 
   useEffect(() => {
     loadReviews(activeRestaurantId)
-  }, [activeRestaurantId])
+  }, [activeRestaurantId, loadReviews])
 
   const onAuthSubmit = async (event) => {
     event.preventDefault()
