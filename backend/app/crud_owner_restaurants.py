@@ -84,9 +84,33 @@ def get_owner_dashboard(db: Session, owner_id: int):
     if rating_values:
         avg_rating = round(sum(rating_values) / len(rating_values), 2)
 
+    restaurant_ids = [item["id"] for item in restaurants]
+    recent_reviews = []
+    if restaurant_ids:
+        rows = (
+            db.query(models.Review, models.Restaurant)
+            .join(models.Restaurant, models.Review.restaurant_id == models.Restaurant.id)
+            .filter(models.Review.restaurant_id.in_(restaurant_ids))
+            .order_by(models.Review.created_at.desc())
+            .limit(10)
+            .all()
+        )
+        recent_reviews = [
+            {
+                "review_id": review.id,
+                "restaurant_id": restaurant.id,
+                "restaurant_name": restaurant.name,
+                "rating": review.rating,
+                "comment": review.comment,
+                "created_at": review.created_at,
+            }
+            for review, restaurant in rows
+        ]
+
     return {
         "claimed_restaurants": claimed_restaurants,
         "total_reviews": total_reviews,
         "avg_rating": avg_rating,
         "restaurants": restaurants,
+        "recent_reviews": recent_reviews,
     }
