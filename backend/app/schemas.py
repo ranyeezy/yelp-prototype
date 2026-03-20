@@ -109,6 +109,17 @@ class OwnerDashboardOut(BaseModel):
     avg_rating: Optional[float] = None
     restaurants: list[OwnerRestaurantSummaryOut]
     recent_reviews: list[OwnerRecentReviewOut] = []
+
+
+class OwnerRestaurantReviewOut(BaseModel):
+    id: int
+    user_id: int
+    user_name: str
+    restaurant_id: int
+    rating: int
+    comment: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
         
 #user preferences
 class UserPreferencesIn(BaseModel):
@@ -258,6 +269,7 @@ class RecommendedRestaurant(BaseModel):
     city: str
     price_tier: Optional[int] = None
     score: float
+    reason: str
 
 
 class AIChatResponse(BaseModel):

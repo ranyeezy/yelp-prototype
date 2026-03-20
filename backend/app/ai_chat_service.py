@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 import re
-import json
 
 from sqlalchemy.orm import Session
 
@@ -13,6 +12,11 @@ try:
     from langchain_core.prompts import ChatPromptTemplate
 except Exception:
     ChatPromptTemplate = None
+
+try:
+    from langchain_core.runnables import RunnableLambda
+except Exception:
+    RunnableLambda = None
 
 try:
     from tavily import TavilyClient
@@ -38,14 +42,14 @@ def _csv_to_list(value: str | None) -> list[str]:
 
 def _parse_price(message: str) -> int | None:
     lowered = message.lower()
-    if "cheap" in lowered or "budget" in lowered or "$" in lowered and "$$" not in lowered:
-        return 1
-    if "$$$" in lowered:
-        return 3
     if "$$$$" in lowered or "luxury" in lowered or "fine dining" in lowered:
         return 4
+    if "$$$" in lowered:
+        return 3
     if "$$" in lowered or "moderate" in lowered or "mid" in lowered:
         return 2
+    if "cheap" in lowered or "budget" in lowered or ("$" in lowered and "$$" not in lowered):
+        return 1
     return None
 
 
@@ -113,25 +117,75 @@ def parse_query(message: str, user_preferences: models.UserPreference | None) ->
     )
 
 
-def _langchain_extract(message: str) -> dict | None:
-    if ChatPromptTemplate is None:
-        return None
+def _history_to_user_text(conversation_history: list[dict] | None) -> str:
+    if not conversation_history:
+        return ""
+    user_messages = []
+    for item in conversation_history:
+        role = str(item.get("role", "")).lower()
+        content = str(item.get("content", "")).strip()
+        if role == "user" and content:
+            user_messages.append(content)
+    return "\n".join(user_messages[-4:])
 
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "Extract only explicit restaurant-search filters as JSON with keys: "
-                "cuisines (list), city (string|null), max_price_tier (int|null), "
-                "dietary (list), ambiance (list), sort_by (string|null).",
-            ),
-            ("human", "{message}"),
-        ]
+
+def _combine_parsed_queries(base: ParsedQuery, history: ParsedQuery) -> ParsedQuery:
+    cuisines = list(dict.fromkeys([*history.cuisines, *base.cuisines]))
+    dietary = list(dict.fromkeys([*history.dietary, *base.dietary]))
+    ambiance = list(dict.fromkeys([*history.ambiance, *base.ambiance]))
+
+    return ParsedQuery(
+        cuisines=cuisines,
+        city=base.city or history.city,
+        max_price_tier=base.max_price_tier or history.max_price_tier,
+        dietary=dietary,
+        ambiance=ambiance,
+        sort_by=base.sort_by if base.sort_by != "rating" else history.sort_by,
     )
 
-    rendered = prompt.format_prompt(message=message).to_messages()
-    if not rendered:
+
+def _langchain_extract(
+    message: str,
+    conversation_history: list[dict] | None,
+    user_preferences: models.UserPreference | None,
+) -> dict | None:
+    if ChatPromptTemplate is None or RunnableLambda is None:
         return None
+
+    def _extract_from_payload(payload: dict) -> dict:
+        if isinstance(payload, dict):
+            current_query = str(payload.get("message", "")).strip()
+            history_text = str(payload.get("history", "")).strip()
+        else:
+            rendered_text = payload.to_string() if hasattr(payload, "to_string") else str(payload)
+            current_query = rendered_text
+            history_text = ""
+
+        base_parsed = parse_query(current_query, user_preferences)
+        if history_text:
+            history_parsed = parse_query(history_text, user_preferences)
+            base_parsed = _combine_parsed_queries(base_parsed, history_parsed)
+
+        return {
+            "cuisines": base_parsed.cuisines,
+            "city": base_parsed.city,
+            "max_price_tier": base_parsed.max_price_tier,
+            "dietary": base_parsed.dietary,
+            "ambiance": base_parsed.ambiance,
+            "sort_by": base_parsed.sort_by,
+        }
+
+    prompt = ChatPromptTemplate.from_template(
+        "Use this conversation context and latest user query to infer restaurant filters.\n"
+        "Conversation history:\n{history}\n\n"
+        "Latest user message:\n{message}"
+    )
+
+    chain = prompt | RunnableLambda(_extract_from_payload)
+
+    history_text = _history_to_user_text(conversation_history)
+    extracted = chain.invoke({"message": message, "history": history_text})
+    return extracted if isinstance(extracted, dict) else None
 
     content = rendered[-1].content if hasattr(rendered[-1], "content") else ""
     if not isinstance(content, str):
@@ -224,31 +278,66 @@ def _score_restaurant(restaurant: models.Restaurant, parsed: ParsedQuery) -> flo
     return score
 
 
+def _reason_for_restaurant(restaurant: models.Restaurant, parsed: ParsedQuery) -> str:
+    reason_parts = []
+    cuisine = (restaurant.cuisine_type or "").lower()
+    description = (restaurant.description or "").lower()
+    amenities = (restaurant.amenities or "").lower()
+    city = (restaurant.city or "").lower()
+
+    if parsed.cuisines and any(pref in cuisine for pref in parsed.cuisines):
+        reason_parts.append("matches your cuisine preference")
+    if parsed.city and parsed.city in city:
+        reason_parts.append("matches your location")
+    if parsed.max_price_tier and restaurant.price_tier and restaurant.price_tier <= parsed.max_price_tier:
+        reason_parts.append("fits your budget")
+    if parsed.dietary and any(term in description or term in amenities for term in parsed.dietary):
+        reason_parts.append("supports your dietary needs")
+    if parsed.ambiance and any(term in description or term in amenities for term in parsed.ambiance):
+        reason_parts.append("matches your ambiance preference")
+
+    if not reason_parts:
+        return "relevant to your query"
+    return ", ".join(reason_parts)
+
+
 def recommend_restaurants(
     db: Session,
     user_id: int,
     message: str,
+    conversation_history: list[dict] | None = None,
     limit: int = 5,
-) -> tuple[dict, list[tuple[models.Restaurant, float]], str, list[dict]]:
+) -> tuple[dict, list[tuple[models.Restaurant, float, str]], str, list[dict]]:
     user_preferences = db.get(models.UserPreference, user_id)
-    parsed = parse_query(message, user_preferences)
-    langchain_extracted = _langchain_extract(message)
+    history_text = _history_to_user_text(conversation_history)
+    effective_message = f"{history_text}\n{message}".strip() if history_text else message
+
+    parsed = parse_query(effective_message, user_preferences)
+    langchain_extracted = _langchain_extract(message, conversation_history, user_preferences)
     parsed = _merge_with_langchain(parsed, langchain_extracted)
 
     restaurants = db.query(models.Restaurant).all()
 
-    scored: list[tuple[models.Restaurant, float]] = []
+    scored: list[tuple[models.Restaurant, float, str]] = []
     for restaurant in restaurants:
         score = _score_restaurant(restaurant, parsed)
         if score > 0:
-            scored.append((restaurant, score))
+            reason = _reason_for_restaurant(restaurant, parsed)
+            scored.append((restaurant, score, reason))
 
     scored.sort(key=lambda item: item[1], reverse=True)
     top_results = scored[:limit]
 
     if top_results:
-        names = ", ".join(r.name for r, _ in top_results[:3])
-        reply = f"I found some options you might like: {names}. I can refine further by budget, location, or dietary needs."
+        summary_lines = [
+            f"{restaurant.name}: {reason}."
+            for restaurant, _, reason in top_results[:3]
+        ]
+        reply = (
+            "Here are personalized matches based on your preferences and conversation: "
+            + " ".join(summary_lines)
+            + " Tell me if you want to narrow by budget, area, or vibe."
+        )
     else:
         reply = "I couldn't find strong matches yet. Try adding cuisine, location, or budget details so I can narrow it down."
 

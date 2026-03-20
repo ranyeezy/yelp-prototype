@@ -37,6 +37,34 @@ def list_my_restaurants(
     return owner_crud.list_claimed_restaurants(db, current_owner.id)
 
 
+@router.get("/restaurants/{restaurant_id}", response_model=schemas.RestaurantOut)
+def get_claimed_restaurant(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+    current_owner=Depends(get_current_owner),
+):
+    return owner_crud.get_claimed_restaurant(db, current_owner.id, restaurant_id)
+
+
+@router.put("/restaurants/{restaurant_id}", response_model=schemas.RestaurantOut)
+def update_claimed_restaurant(
+    restaurant_id: int,
+    payload: schemas.RestaurantUpdate,
+    db: Session = Depends(get_db),
+    current_owner=Depends(get_current_owner),
+):
+    return owner_crud.update_claimed_restaurant(db, current_owner.id, restaurant_id, payload)
+
+
+@router.get("/restaurants/{restaurant_id}/reviews", response_model=list[schemas.OwnerRestaurantReviewOut])
+def list_claimed_restaurant_reviews(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+    current_owner=Depends(get_current_owner),
+):
+    return owner_crud.list_claimed_restaurant_reviews(db, current_owner.id, restaurant_id)
+
+
 @router.get("/dashboard", response_model=schemas.OwnerDashboardOut)
 def owner_dashboard(
     db: Session = Depends(get_db),

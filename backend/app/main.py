@@ -1,10 +1,16 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from .database import Base, engine
 from . import models
 from .routers import auth, users, owners, preferences, ai_assistant, reviews, favorites, restaurants
 
 app = FastAPI(title="Yelp Prototype API")
+uploads_path = Path(__file__).resolve().parents[1] / "uploads"
+uploads_path.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,

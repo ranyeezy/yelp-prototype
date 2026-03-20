@@ -18,6 +18,7 @@ def chat_with_assistant(
         db=db,
         user_id=current_user.id,
         message=payload.message,
+        conversation_history=[msg.model_dump() for msg in payload.conversation_history],
     )
 
     recommendations = [
@@ -28,8 +29,9 @@ def chat_with_assistant(
             city=restaurant.city,
             price_tier=restaurant.price_tier,
             score=round(score, 2),
+            reason=reason,
         )
-        for restaurant, score in ranked
+        for restaurant, score, reason in ranked
     ]
 
     return schemas.AIChatResponse(

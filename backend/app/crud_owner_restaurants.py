@@ -5,6 +5,23 @@ from sqlalchemy.orm import Session
 from . import models
 
 
+def _ensure_claim(db: Session, owner_id: int, restaurant_id: int):
+    claim = (
+        db.query(models.OwnerRestaurant)
+        .filter(
+            models.OwnerRestaurant.owner_id == owner_id,
+            models.OwnerRestaurant.restaurant_id == restaurant_id,
+        )
+        .first()
+    )
+    if claim is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only manage restaurants you have claimed",
+        )
+    return claim
+
+
 def claim_restaurant(db: Session, owner_id: int, restaurant_id: int):
     restaurant = db.get(models.Restaurant, restaurant_id)
     if not restaurant:
@@ -114,3 +131,49 @@ def get_owner_dashboard(db: Session, owner_id: int):
         "restaurants": restaurants,
         "recent_reviews": recent_reviews,
     }
+
+
+def get_claimed_restaurant(db: Session, owner_id: int, restaurant_id: int):
+    _ensure_claim(db, owner_id, restaurant_id)
+    restaurant = db.get(models.Restaurant, restaurant_id)
+    if restaurant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Restaurant not found",
+        )
+    return restaurant
+
+
+def update_claimed_restaurant(db: Session, owner_id: int, restaurant_id: int, payload):
+    restaurant = get_claimed_restaurant(db, owner_id, restaurant_id)
+    data = payload.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        setattr(restaurant, key, value)
+    db.commit()
+    db.refresh(restaurant)
+    return restaurant
+
+
+def list_claimed_restaurant_reviews(db: Session, owner_id: int, restaurant_id: int):
+    _ensure_claim(db, owner_id, restaurant_id)
+    rows = (
+        db.query(models.Review, models.User)
+        .join(models.User, models.Review.user_id == models.User.id)
+        .filter(models.Review.restaurant_id == restaurant_id)
+        .order_by(models.Review.created_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": review.id,
+            "user_id": review.user_id,
+            "user_name": user.name,
+            "restaurant_id": review.restaurant_id,
+            "rating": review.rating,
+            "comment": review.comment,
+            "created_at": review.created_at,
+            "updated_at": review.updated_at,
+        }
+        for review, user in rows
+    ]
