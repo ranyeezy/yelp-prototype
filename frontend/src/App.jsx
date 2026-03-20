@@ -31,6 +31,13 @@ function App() {
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' })
   const [reviewMessage, setReviewMessage] = useState('')
 
+  const [aiInput, setAiInput] = useState('')
+  const [aiConversation, setAiConversation] = useState([])
+  const [aiRecommendations, setAiRecommendations] = useState([])
+  const [aiFilters, setAiFilters] = useState(null)
+  const [aiMessage, setAiMessage] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+
   const activeRestaurant = useMemo(
     () => restaurants.find((restaurant) => restaurant.id === activeRestaurantId) ?? null,
     [restaurants, activeRestaurantId],
@@ -316,6 +323,48 @@ function App() {
     setOwnerMessage('Owner logged out.')
   }
 
+  const submitAiMessage = async (event) => {
+    event.preventDefault()
+    setAiMessage('')
+
+    if (!token) {
+      setAiMessage('Please login as user to use AI assistant.')
+      return
+    }
+
+    const trimmed = aiInput.trim()
+    if (!trimmed) {
+      setAiMessage('Please enter a message for the assistant.')
+      return
+    }
+
+    setAiLoading(true)
+    try {
+      const history = aiConversation.map((item) => ({ role: item.role, content: item.content }))
+      const response = await apiRequest('/ai-assistant/chat', {
+        method: 'POST',
+        body: JSON.stringify({
+          message: trimmed,
+          conversation_history: history,
+        }),
+        headers: {},
+      })
+
+      setAiConversation((prev) => [
+        ...prev,
+        { role: 'user', content: trimmed },
+        { role: 'assistant', content: response.reply },
+      ])
+      setAiRecommendations(response.recommendations ?? [])
+      setAiFilters(response.extracted_filters ?? null)
+      setAiInput('')
+    } catch (error) {
+      setAiMessage(error.message)
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
   return (
     <div className="app-shell">
       <header>
@@ -448,6 +497,46 @@ function App() {
               <p>{restaurant.cuisine_type} • {restaurant.city}</p>
               <p>Avg Rating: {restaurant.avg_rating ?? 'N/A'}</p>
               <p>Review Count: {restaurant.review_count}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <h2>AI Assistant</h2>
+        <form onSubmit={submitAiMessage} className="stack">
+          <textarea
+            placeholder="Ask for recommendations (e.g., affordable Indian food in San Jose)"
+            value={aiInput}
+            onChange={(event) => setAiInput(event.target.value)}
+          />
+          <button type="submit" disabled={aiLoading}>
+            {aiLoading ? 'Thinking...' : 'Ask Assistant'}
+          </button>
+        </form>
+        {aiMessage && <p className="info">{aiMessage}</p>}
+
+        <div className="list">
+          {aiConversation.map((msg, index) => (
+            <article key={`${msg.role}-${index}`} className="card">
+              <p><strong>{msg.role === 'assistant' ? 'Assistant' : 'You'}:</strong> {msg.content}</p>
+            </article>
+          ))}
+        </div>
+
+        {aiFilters && (
+          <div className="card">
+            <h3>Extracted Filters</h3>
+            <p>{JSON.stringify(aiFilters)}</p>
+          </div>
+        )}
+
+        <div className="list">
+          {aiRecommendations.map((restaurant) => (
+            <article key={restaurant.id} className="card">
+              <h3>{restaurant.name}</h3>
+              <p>{restaurant.cuisine_type} • {restaurant.city}</p>
+              <p>Price Tier: {restaurant.price_tier ?? 'N/A'} | Score: {restaurant.score}</p>
             </article>
           ))}
         </div>

@@ -135,3 +135,12 @@ uvicorn app.main:app --reload
 
 - Keep using `requirements.txt` as the backend dependency source for submission.
 - Tables auto-create on app startup via SQLAlchemy metadata.
+
+## Frontend demo flows
+
+- User auth (signup/login)
+- Restaurant search/listing
+- Favorites add/remove
+- Reviews create/list
+- Owner login, claim restaurant, dashboard view
+- AI assistant chat recommendations
