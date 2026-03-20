@@ -58,6 +58,7 @@ function App() {
   const [editingListingForm, setEditingListingForm] = useState({ description: '', price_tier: '' })
 
   const [favoriteRestaurantIds, setFavoriteRestaurantIds] = useState(new Set())
+  const [favoriteRestaurants, setFavoriteRestaurants] = useState([])
   const [favoritesMessage, setFavoritesMessage] = useState('')
   const [favoriteActionId, setFavoriteActionId] = useState(null)
 
@@ -78,6 +79,8 @@ function App() {
   const [reviews, setReviews] = useState([])
   const [myReviewHistory, setMyReviewHistory] = useState([])
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' })
+  const [editingReviewId, setEditingReviewId] = useState(null)
+  const [editingReviewForm, setEditingReviewForm] = useState({ rating: 5, comment: '' })
   const [reviewMessage, setReviewMessage] = useState('')
   const [reviewSaving, setReviewSaving] = useState(false)
 
@@ -188,13 +191,16 @@ function App() {
   const loadFavorites = useCallback(async () => {
     if (!token) {
       setFavoriteRestaurantIds(new Set())
+      setFavoriteRestaurants([])
       return
     }
     try {
       const data = await apiRequest('/favorites/me')
       setFavoriteRestaurantIds(new Set(data.map((item) => item.restaurant.id)))
+      setFavoriteRestaurants(data.map((item) => item.restaurant))
     } catch {
       setFavoriteRestaurantIds(new Set())
+      setFavoriteRestaurants([])
     }
   }, [token, apiRequest])
 
@@ -460,6 +466,54 @@ function App() {
       setReviewForm({ rating: 5, comment: '' })
       setReviewMessage('Review added successfully.')
       await loadReviews(activeRestaurantId)
+      await loadMyReviewHistory()
+    } catch (error) {
+      setReviewMessage(error.message)
+    } finally {
+      setReviewSaving(false)
+    }
+  }
+
+  const startEditReview = (review) => {
+    setEditingReviewId(review.id)
+    setEditingReviewForm({
+      rating: review.rating,
+      comment: review.comment || '',
+    })
+  }
+
+  const saveReviewEdit = async (reviewId) => {
+    setReviewMessage('')
+    setReviewSaving(true)
+    try {
+      await apiRequest(`/reviews/${reviewId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          rating: Number(editingReviewForm.rating),
+          comment: editingReviewForm.comment,
+        }),
+        headers: {},
+      })
+      setEditingReviewId(null)
+      setReviewMessage('Review updated successfully.')
+      await loadReviews(activeRestaurantId)
+      await loadMyReviewHistory()
+    } catch (error) {
+      setReviewMessage(error.message)
+    } finally {
+      setReviewSaving(false)
+    }
+  }
+
+  const deleteReview = async (reviewId) => {
+    setReviewMessage('')
+    setReviewSaving(true)
+    try {
+      await apiRequest(`/reviews/${reviewId}`, { method: 'DELETE' })
+      setEditingReviewId(null)
+      setReviewMessage('Review deleted successfully.')
+      await loadReviews(activeRestaurantId)
+      await loadMyReviewHistory()
     } catch (error) {
       setReviewMessage(error.message)
     } finally {
@@ -763,6 +817,13 @@ function App() {
     } finally {
       setAiLoading(false)
     }
+  }
+
+  const clearAiConversation = () => {
+    setAiConversation([])
+    setAiRecommendations([])
+    setAiFilters(null)
+    setAiMessage('Conversation cleared.')
   }
 
   const formattedFilters = aiFilters ? JSON.stringify(aiFilters, null, 2) : ''
@@ -1215,6 +1276,27 @@ function App() {
       </section>
 
       <section className="panel">
+        <h2>My Favorites</h2>
+        {token && favoriteRestaurants.length === 0 && <p className="info">No favorites yet.</p>}
+        {!token && <p className="info">Login to view your favorites.</p>}
+        <div className="restaurant-grid">
+          {favoriteRestaurants.map((restaurant) => (
+            <article key={`fav-${restaurant.id}`} className="restaurant-card">
+              <div className="restaurant-head">
+                <h3>{restaurant.name}</h3>
+                <span className="chip">{restaurant.cuisine_type}</span>
+              </div>
+              <p className="muted">{restaurant.city}</p>
+              <div className="row wrap">
+                <button onClick={() => setActiveRestaurantId(restaurant.id)}>Open Details</button>
+                <button onClick={() => toggleFavorite(restaurant.id)} disabled={favoriteActionId === restaurant.id}>Unfavorite</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
         <h2>Restaurants</h2>
         <div className="row wrap">
           <input
@@ -1264,6 +1346,14 @@ function App() {
       <div className="two-col">
         <section className="panel">
           <h2>Reviews {activeRestaurant ? `for ${activeRestaurant.name}` : ''}</h2>
+          {activeRestaurant && (
+            <p className="info">Total Reviews: {reviews.length}</p>
+          )}
+          {activeRestaurant && reviews.length > 0 && (
+            <p className="info">
+              Average Rating: {(reviews.reduce((sum, item) => sum + Number(item.rating || 0), 0) / reviews.length).toFixed(1)}/5
+            </p>
+          )}
           <form onSubmit={submitReview} className="stack">
             <label>
               Rating
@@ -1294,8 +1384,41 @@ function App() {
           <div className="list">
             {reviews.map((review) => (
               <article key={review.id} className="card">
-                <p><strong>{review.rating}/5</strong></p>
-                <p>{review.comment || 'No comment'}</p>
+                {editingReviewId === review.id ? (
+                  <div className="stack">
+                    <label>
+                      Rating
+                      <select
+                        value={editingReviewForm.rating}
+                        onChange={(event) => setEditingReviewForm((prev) => ({ ...prev, rating: event.target.value }))}
+                      >
+                        {[1, 2, 3, 4, 5].map((rating) => (
+                          <option value={rating} key={`edit-${rating}`}>{rating}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <textarea
+                      value={editingReviewForm.comment}
+                      onChange={(event) => setEditingReviewForm((prev) => ({ ...prev, comment: event.target.value }))}
+                    />
+                    <div className="row wrap">
+                      <button onClick={() => saveReviewEdit(review.id)} disabled={reviewSaving}>Save</button>
+                      <button onClick={() => setEditingReviewId(null)} disabled={reviewSaving}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p><strong>{review.rating}/5</strong></p>
+                    <p>{review.comment || 'No comment'}</p>
+                    <p className="muted">Date: {new Date(review.created_at).toLocaleString()}</p>
+                    {currentUser?.id === review.user_id && (
+                      <div className="row wrap">
+                        <button onClick={() => startEditReview(review)} disabled={reviewSaving}>Edit</button>
+                        <button onClick={() => deleteReview(review.id)} disabled={reviewSaving}>Delete</button>
+                      </div>
+                    )}
+                  </>
+                )}
               </article>
             ))}
           </div>
@@ -1311,6 +1434,9 @@ function App() {
             />
             <button type="submit" disabled={aiLoading}>
               {aiLoading ? 'Thinking...' : 'Ask Assistant'}
+            </button>
+            <button type="button" onClick={clearAiConversation} disabled={aiLoading || aiConversation.length === 0}>
+              Clear Conversation
             </button>
           </form>
 
@@ -1341,6 +1467,7 @@ function App() {
                 <h3>{restaurant.name}</h3>
                 <p>{restaurant.cuisine_type} • {restaurant.city}</p>
                 <p>Price Tier: {restaurant.price_tier ?? 'N/A'} | Score: {restaurant.score}</p>
+                <button onClick={() => setActiveRestaurantId(restaurant.id)}>Open Details</button>
               </article>
             ))}
           </div>
