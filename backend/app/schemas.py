@@ -176,6 +176,23 @@ class ReviewOut(BaseModel):
         from_attributes = True
 
 
+# favorites
+class FavoriteOut(BaseModel):
+    id: int
+    user_id: int
+    restaurant_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class FavoriteRestaurantOut(BaseModel):
+    favorite_id: int
+    favorited_at: datetime
+    restaurant: RestaurantOut
+
+
 # Q11 - AI assistant chatbot
 class ChatMessage(BaseModel):
     role: str
