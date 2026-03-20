@@ -365,182 +365,139 @@ function App() {
     }
   }
 
+  const formattedFilters = aiFilters ? JSON.stringify(aiFilters, null, 2) : ''
+
   return (
     <div className="app-shell">
-      <header>
-        <h1>Yelp Prototype Frontend</h1>
-        <p>Lab demo client for auth, restaurants, favorites, and reviews.</p>
+      <header className="hero">
+        <div className="hero-brand">
+          <span className="brand-pill">Yelp Lab Experience</span>
+          <h1>Discover great places. Build great demos.</h1>
+          <p>Production-style UI for your Yelp prototype with user, owner, and AI flows.</p>
+        </div>
+        <div className="hero-meta">
+          <p className="pair-credit">Lab Pair 20: Viraat Chaudhary and Raniel Quesada.</p>
+        </div>
       </header>
 
-      <section className="panel">
-        <h2>API Connection</h2>
-        <div className="row">
+      <section className="panel panel-accent">
+        <h2>Control Center</h2>
+        <div className="row wrap">
           <input
             value={apiBaseUrl}
             onChange={(event) => setApiBaseUrl(event.target.value)}
             placeholder="http://127.0.0.1:8000"
           />
           <button onClick={loadRestaurants}>Reload Restaurants</button>
+          <span className="status-chip">User: {currentUser ? 'Connected' : 'Guest'}</span>
+          <span className="status-chip">Owner: {currentOwner ? 'Connected' : 'Guest'}</span>
         </div>
       </section>
 
-      <section className="panel">
-        <h2>User Auth</h2>
-        <div className="row">
-          <button className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>
-            Login
-          </button>
-          <button className={authMode === 'signup' ? 'active' : ''} onClick={() => setAuthMode('signup')}>
-            Sign Up
-          </button>
-          {token && <button onClick={logout}>Logout</button>}
-        </div>
+      <div className="two-col">
+        <section className="panel">
+          <h2>User Account</h2>
+          <div className="row">
+            <button className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>Login</button>
+            <button className={authMode === 'signup' ? 'active' : ''} onClick={() => setAuthMode('signup')}>Sign Up</button>
+            {token && <button onClick={logout}>Logout</button>}
+          </div>
 
-        <form onSubmit={onAuthSubmit} className="stack">
-          {authMode === 'signup' && (
+          <form onSubmit={onAuthSubmit} className="stack">
+            {authMode === 'signup' && (
+              <input
+                value={authForm.name}
+                onChange={(event) => setAuthForm((prev) => ({ ...prev, name: event.target.value }))}
+                placeholder="Full name"
+                required
+              />
+            )}
             <input
-              value={authForm.name}
-              onChange={(event) => setAuthForm((prev) => ({ ...prev, name: event.target.value }))}
-              placeholder="Full name"
+              value={authForm.email}
+              onChange={(event) => setAuthForm((prev) => ({ ...prev, email: event.target.value }))}
+              placeholder="Email"
+              type="email"
               required
             />
-          )}
-          <input
-            value={authForm.email}
-            onChange={(event) => setAuthForm((prev) => ({ ...prev, email: event.target.value }))}
-            placeholder="Email"
-            type="email"
-            required
-          />
-          <input
-            value={authForm.password}
-            onChange={(event) => setAuthForm((prev) => ({ ...prev, password: event.target.value }))}
-            placeholder="Password"
-            type="password"
-            required
-          />
-          <button type="submit">{authMode === 'signup' ? 'Create Account + Login' : 'Login'}</button>
-        </form>
-
-        {currentUser && (
-          <p className="success">Logged in as: {currentUser.name} ({currentUser.email})</p>
-        )}
-        {authMessage && <p className="info">{authMessage}</p>}
-      </section>
-
-      <section className="panel">
-        <h2>Owner Portal</h2>
-        <div className="row wrap">
-          <button className={ownerAuthMode === 'login' ? 'active' : ''} onClick={() => setOwnerAuthMode('login')}>
-            Owner Login
-          </button>
-          <button className={ownerAuthMode === 'signup' ? 'active' : ''} onClick={() => setOwnerAuthMode('signup')}>
-            Owner Sign Up
-          </button>
-          {ownerToken && <button onClick={ownerLogout}>Owner Logout</button>}
-          {ownerToken && <button onClick={loadOwnerData}>Refresh Dashboard</button>}
-        </div>
-
-        <form onSubmit={onOwnerAuthSubmit} className="stack">
-          {ownerAuthMode === 'signup' && (
             <input
-              value={ownerForm.name}
-              onChange={(event) => setOwnerForm((prev) => ({ ...prev, name: event.target.value }))}
-              placeholder="Owner full name"
+              value={authForm.password}
+              onChange={(event) => setAuthForm((prev) => ({ ...prev, password: event.target.value }))}
+              placeholder="Password"
+              type="password"
               required
             />
+            <button type="submit">{authMode === 'signup' ? 'Create Account + Login' : 'Login'}</button>
+          </form>
+
+          {currentUser && <p className="success">Logged in as: {currentUser.name} ({currentUser.email})</p>}
+          {authMessage && <p className="info">{authMessage}</p>}
+        </section>
+
+        <section className="panel">
+          <h2>Owner Portal</h2>
+          <div className="row wrap">
+            <button className={ownerAuthMode === 'login' ? 'active' : ''} onClick={() => setOwnerAuthMode('login')}>Owner Login</button>
+            <button className={ownerAuthMode === 'signup' ? 'active' : ''} onClick={() => setOwnerAuthMode('signup')}>Owner Sign Up</button>
+            {ownerToken && <button onClick={ownerLogout}>Owner Logout</button>}
+            {ownerToken && <button onClick={loadOwnerData}>Refresh Dashboard</button>}
+          </div>
+
+          <form onSubmit={onOwnerAuthSubmit} className="stack">
+            {ownerAuthMode === 'signup' && (
+              <input
+                value={ownerForm.name}
+                onChange={(event) => setOwnerForm((prev) => ({ ...prev, name: event.target.value }))}
+                placeholder="Owner full name"
+                required
+              />
+            )}
+            <input
+              value={ownerForm.email}
+              onChange={(event) => setOwnerForm((prev) => ({ ...prev, email: event.target.value }))}
+              placeholder="Owner email"
+              type="email"
+              required
+            />
+            <input
+              value={ownerForm.password}
+              onChange={(event) => setOwnerForm((prev) => ({ ...prev, password: event.target.value }))}
+              placeholder="Owner password"
+              type="password"
+              required
+            />
+            <button type="submit">{ownerAuthMode === 'signup' ? 'Create Owner + Login' : 'Owner Login'}</button>
+          </form>
+
+          <div className="row wrap">
+            <input
+              value={ownerClaimRestaurantId}
+              onChange={(event) => setOwnerClaimRestaurantId(event.target.value)}
+              placeholder="Restaurant ID to claim"
+            />
+            <button onClick={() => claimRestaurantForOwner(Number(ownerClaimRestaurantId))}>Claim by ID</button>
+          </div>
+
+          {currentOwner && <p className="success">Owner logged in as: {currentOwner.name}</p>}
+          {ownerMessage && <p className="info">{ownerMessage}</p>}
+
+          {ownerDashboard && (
+            <div className="stats-grid">
+              <article className="metric-card">
+                <span>Claimed</span>
+                <strong>{ownerDashboard.claimed_restaurants}</strong>
+              </article>
+              <article className="metric-card">
+                <span>Total Reviews</span>
+                <strong>{ownerDashboard.total_reviews}</strong>
+              </article>
+              <article className="metric-card">
+                <span>Avg Rating</span>
+                <strong>{ownerDashboard.avg_rating ?? 'N/A'}</strong>
+              </article>
+            </div>
           )}
-          <input
-            value={ownerForm.email}
-            onChange={(event) => setOwnerForm((prev) => ({ ...prev, email: event.target.value }))}
-            placeholder="Owner email"
-            type="email"
-            required
-          />
-          <input
-            value={ownerForm.password}
-            onChange={(event) => setOwnerForm((prev) => ({ ...prev, password: event.target.value }))}
-            placeholder="Owner password"
-            type="password"
-            required
-          />
-          <button type="submit">{ownerAuthMode === 'signup' ? 'Create Owner + Login' : 'Owner Login'}</button>
-        </form>
-
-        <div className="row wrap">
-          <input
-            value={ownerClaimRestaurantId}
-            onChange={(event) => setOwnerClaimRestaurantId(event.target.value)}
-            placeholder="Restaurant ID to claim"
-          />
-          <button onClick={() => claimRestaurantForOwner(Number(ownerClaimRestaurantId))}>
-            Claim by ID
-          </button>
-        </div>
-
-        {currentOwner && <p className="success">Owner logged in as: {currentOwner.name}</p>}
-        {ownerMessage && <p className="info">{ownerMessage}</p>}
-
-        {ownerDashboard && (
-          <div className="card">
-            <h3>Owner Dashboard</h3>
-            <p>Claimed Restaurants: {ownerDashboard.claimed_restaurants}</p>
-            <p>Total Reviews: {ownerDashboard.total_reviews}</p>
-            <p>Average Rating: {ownerDashboard.avg_rating ?? 'N/A'}</p>
-          </div>
-        )}
-
-        <div className="list">
-          {ownerRestaurants.map((restaurant) => (
-            <article key={restaurant.id} className="card">
-              <h3>{restaurant.name}</h3>
-              <p>{restaurant.cuisine_type} • {restaurant.city}</p>
-              <p>Avg Rating: {restaurant.avg_rating ?? 'N/A'}</p>
-              <p>Review Count: {restaurant.review_count}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel">
-        <h2>AI Assistant</h2>
-        <form onSubmit={submitAiMessage} className="stack">
-          <textarea
-            placeholder="Ask for recommendations (e.g., affordable Indian food in San Jose)"
-            value={aiInput}
-            onChange={(event) => setAiInput(event.target.value)}
-          />
-          <button type="submit" disabled={aiLoading}>
-            {aiLoading ? 'Thinking...' : 'Ask Assistant'}
-          </button>
-        </form>
-        {aiMessage && <p className="info">{aiMessage}</p>}
-
-        <div className="list">
-          {aiConversation.map((msg, index) => (
-            <article key={`${msg.role}-${index}`} className="card">
-              <p><strong>{msg.role === 'assistant' ? 'Assistant' : 'You'}:</strong> {msg.content}</p>
-            </article>
-          ))}
-        </div>
-
-        {aiFilters && (
-          <div className="card">
-            <h3>Extracted Filters</h3>
-            <p>{JSON.stringify(aiFilters)}</p>
-          </div>
-        )}
-
-        <div className="list">
-          {aiRecommendations.map((restaurant) => (
-            <article key={restaurant.id} className="card">
-              <h3>{restaurant.name}</h3>
-              <p>{restaurant.cuisine_type} • {restaurant.city}</p>
-              <p>Price Tier: {restaurant.price_tier ?? 'N/A'} | Score: {restaurant.score}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+        </section>
+      </div>
 
       <section className="panel">
         <h2>Restaurants</h2>
@@ -567,60 +524,122 @@ function App() {
         {restaurantsMessage && <p className="info">{restaurantsMessage}</p>}
         {favoritesMessage && <p className="info">{favoritesMessage}</p>}
 
-        <div className="list">
+        <div className="restaurant-grid">
           {restaurants.map((restaurant) => (
-            <article key={restaurant.id} className="card">
-              <h3>{restaurant.name}</h3>
-              <p>{restaurant.cuisine_type} • {restaurant.city}</p>
+            <article key={restaurant.id} className="restaurant-card">
+              <div className="restaurant-head">
+                <h3>{restaurant.name}</h3>
+                <span className="chip">{restaurant.cuisine_type}</span>
+              </div>
+              <p className="muted">{restaurant.city}</p>
               {restaurant.description && <p>{restaurant.description}</p>}
-              <div className="row">
-                <button onClick={() => setActiveRestaurantId(restaurant.id)}>
-                  View Reviews
-                </button>
+              <div className="row wrap">
+                <button onClick={() => setActiveRestaurantId(restaurant.id)}>View Reviews</button>
                 <button onClick={() => toggleFavorite(restaurant.id)}>
                   {favoriteRestaurantIds.has(restaurant.id) ? 'Unfavorite' : 'Favorite'}
                 </button>
-                <button onClick={() => claimRestaurantForOwner(restaurant.id)}>
-                  Claim (Owner)
-                </button>
+                <button onClick={() => claimRestaurantForOwner(restaurant.id)}>Claim (Owner)</button>
               </div>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="panel">
-        <h2>Reviews {activeRestaurant ? `for ${activeRestaurant.name}` : ''}</h2>
-        <form onSubmit={submitReview} className="stack">
-          <label>
-            Rating
-            <select
-              value={reviewForm.rating}
-              onChange={(event) => setReviewForm((prev) => ({ ...prev, rating: event.target.value }))}
-            >
-              {[1, 2, 3, 4, 5].map((rating) => (
-                <option value={rating} key={rating}>{rating}</option>
-              ))}
-            </select>
-          </label>
-          <textarea
-            placeholder="Write your review"
-            value={reviewForm.comment}
-            onChange={(event) => setReviewForm((prev) => ({ ...prev, comment: event.target.value }))}
-          />
-          <button type="submit">Post Review</button>
-        </form>
-        {reviewMessage && <p className="info">{reviewMessage}</p>}
+      <div className="two-col">
+        <section className="panel">
+          <h2>Reviews {activeRestaurant ? `for ${activeRestaurant.name}` : ''}</h2>
+          <form onSubmit={submitReview} className="stack">
+            <label>
+              Rating
+              <select
+                value={reviewForm.rating}
+                onChange={(event) => setReviewForm((prev) => ({ ...prev, rating: event.target.value }))}
+              >
+                {[1, 2, 3, 4, 5].map((rating) => (
+                  <option value={rating} key={rating}>{rating}</option>
+                ))}
+              </select>
+            </label>
+            <textarea
+              placeholder="Write your review"
+              value={reviewForm.comment}
+              onChange={(event) => setReviewForm((prev) => ({ ...prev, comment: event.target.value }))}
+            />
+            <button type="submit">Post Review</button>
+          </form>
+          {reviewMessage && <p className="info">{reviewMessage}</p>}
 
-        <div className="list">
-          {reviews.map((review) => (
-            <article key={review.id} className="card">
-              <p>Rating: {review.rating}/5</p>
-              <p>{review.comment || 'No comment'}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+          <div className="list">
+            {reviews.map((review) => (
+              <article key={review.id} className="card">
+                <p><strong>{review.rating}/5</strong></p>
+                <p>{review.comment || 'No comment'}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel">
+          <h2>AI Assistant</h2>
+          <form onSubmit={submitAiMessage} className="stack">
+            <textarea
+              placeholder="Ask for recommendations (e.g., affordable Indian food in San Jose)"
+              value={aiInput}
+              onChange={(event) => setAiInput(event.target.value)}
+            />
+            <button type="submit" disabled={aiLoading}>
+              {aiLoading ? 'Thinking...' : 'Ask Assistant'}
+            </button>
+          </form>
+
+          {aiMessage && <p className="info">{aiMessage}</p>}
+
+          {aiFilters && (
+            <div className="card">
+              <h3>Extracted Filters</h3>
+              <pre className="filters-block">{formattedFilters}</pre>
+            </div>
+          )}
+
+          <div className="list">
+            {aiConversation.map((msg, index) => (
+              <article key={`${msg.role}-${index}`} className="card">
+                <p><strong>{msg.role === 'assistant' ? 'Assistant' : 'You'}:</strong> {msg.content}</p>
+              </article>
+            ))}
+          </div>
+
+          <div className="list">
+            {aiRecommendations.map((restaurant) => (
+              <article key={restaurant.id} className="card">
+                <h3>{restaurant.name}</h3>
+                <p>{restaurant.cuisine_type} • {restaurant.city}</p>
+                <p>Price Tier: {restaurant.price_tier ?? 'N/A'} | Score: {restaurant.score}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      {ownerRestaurants.length > 0 && (
+        <section className="panel">
+          <h2>Claimed Restaurants Snapshot</h2>
+          <div className="restaurant-grid">
+            {ownerRestaurants.map((restaurant) => (
+              <article key={`owner-${restaurant.id}`} className="restaurant-card">
+                <h3>{restaurant.name}</h3>
+                <p className="muted">{restaurant.cuisine_type} • {restaurant.city}</p>
+                <p>Avg Rating: {restaurant.avg_rating ?? 'N/A'}</p>
+                <p>Review Count: {restaurant.review_count}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <footer className="site-footer">
+        <p>Lab Pair 20: Viraat Chaudhary and Raniel Quesada.</p>
+      </footer>
     </div>
   )
 }
