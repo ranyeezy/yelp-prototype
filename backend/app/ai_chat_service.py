@@ -1,11 +1,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 import re
+import json
 
 from sqlalchemy.orm import Session
 
 from . import models
+
+try:
+    from langchain_core.prompts import ChatPromptTemplate
+except Exception:
+    ChatPromptTemplate = None
+
+try:
+    from tavily import TavilyClient
+except Exception:
+    TavilyClient = None
 
 
 @dataclass
@@ -101,6 +113,91 @@ def parse_query(message: str, user_preferences: models.UserPreference | None) ->
     )
 
 
+def _langchain_extract(message: str) -> dict | None:
+    if ChatPromptTemplate is None:
+        return None
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "Extract only explicit restaurant-search filters as JSON with keys: "
+                "cuisines (list), city (string|null), max_price_tier (int|null), "
+                "dietary (list), ambiance (list), sort_by (string|null).",
+            ),
+            ("human", "{message}"),
+        ]
+    )
+
+    rendered = prompt.format_prompt(message=message).to_messages()
+    if not rendered:
+        return None
+
+    content = rendered[-1].content if hasattr(rendered[-1], "content") else ""
+    if not isinstance(content, str):
+        return None
+
+    try:
+        maybe_json = content.strip()
+        if maybe_json.startswith("{") and maybe_json.endswith("}"):
+            parsed = json.loads(maybe_json)
+            return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        return None
+
+    return None
+
+
+def _merge_with_langchain(parsed: ParsedQuery, extracted: dict | None) -> ParsedQuery:
+    if not extracted:
+        return parsed
+
+    cuisines = extracted.get("cuisines") if isinstance(extracted.get("cuisines"), list) else parsed.cuisines
+    dietary = extracted.get("dietary") if isinstance(extracted.get("dietary"), list) else parsed.dietary
+    ambiance = extracted.get("ambiance") if isinstance(extracted.get("ambiance"), list) else parsed.ambiance
+
+    city = extracted.get("city") if isinstance(extracted.get("city"), str) else parsed.city
+    max_price_tier = extracted.get("max_price_tier") if isinstance(extracted.get("max_price_tier"), int) else parsed.max_price_tier
+    sort_by = extracted.get("sort_by") if isinstance(extracted.get("sort_by"), str) else parsed.sort_by
+
+    return ParsedQuery(
+        cuisines=[str(c).lower() for c in cuisines] if cuisines else parsed.cuisines,
+        city=city.lower() if isinstance(city, str) else parsed.city,
+        max_price_tier=max_price_tier,
+        dietary=[str(d).lower() for d in dietary] if dietary else parsed.dietary,
+        ambiance=[str(a).lower() for a in ambiance] if ambiance else parsed.ambiance,
+        sort_by=sort_by,
+    )
+
+
+def _get_tavily_context(message: str, limit: int = 3) -> list[dict]:
+    if TavilyClient is None:
+        return []
+
+    api_key = os.getenv("TAVILY_API_KEY")
+    if not api_key:
+        return []
+
+    try:
+        client = TavilyClient(api_key=api_key)
+        result = client.search(query=message, max_results=limit)
+        rows = result.get("results", []) if isinstance(result, dict) else []
+        context = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            context.append(
+                {
+                    "title": row.get("title"),
+                    "url": row.get("url"),
+                    "content": row.get("content"),
+                }
+            )
+        return context
+    except Exception:
+        return []
+
+
 def _score_restaurant(restaurant: models.Restaurant, parsed: ParsedQuery) -> float:
     score = 0.0
 
@@ -132,9 +229,11 @@ def recommend_restaurants(
     user_id: int,
     message: str,
     limit: int = 5,
-) -> tuple[dict, list[tuple[models.Restaurant, float]], str]:
+) -> tuple[dict, list[tuple[models.Restaurant, float]], str, list[dict]]:
     user_preferences = db.get(models.UserPreference, user_id)
     parsed = parse_query(message, user_preferences)
+    langchain_extracted = _langchain_extract(message)
+    parsed = _merge_with_langchain(parsed, langchain_extracted)
 
     restaurants = db.query(models.Restaurant).all()
 
@@ -162,4 +261,6 @@ def recommend_restaurants(
         "sort_by": parsed.sort_by,
     }
 
-    return extracted, top_results, reply
+    web_context = _get_tavily_context(message)
+
+    return extracted, top_results, reply, web_context

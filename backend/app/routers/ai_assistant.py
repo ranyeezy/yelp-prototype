@@ -14,7 +14,7 @@ def chat_with_assistant(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    extracted_filters, ranked, reply = recommend_restaurants(
+    extracted_filters, ranked, reply, web_context = recommend_restaurants(
         db=db,
         user_id=current_user.id,
         message=payload.message,
@@ -36,4 +36,5 @@ def chat_with_assistant(
         reply=reply,
         extracted_filters=extracted_filters,
         recommendations=recommendations,
+        web_context=web_context,
     )
