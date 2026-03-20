@@ -47,6 +47,13 @@ uvicorn app.main:app --reload
 - `GET /preferences/me`
 - `PUT /preferences/me`
 
+### Restaurants
+- `POST /restaurants`
+- `GET /restaurants`
+- `GET /restaurants/{restaurant_id}`
+- `PUT /restaurants/{restaurant_id}`
+- `DELETE /restaurants/{restaurant_id}`
+
 ### Reviews
 - `POST /reviews`
 - `GET /reviews/restaurant/{restaurant_id}`
@@ -84,6 +91,19 @@ uvicorn app.main:app --reload
 	"restaurant_id": 1,
 	"rating": 5,
 	"comment": "Amazing food and service"
+}
+```
+
+### Create restaurant
+
+`POST /restaurants` (Bearer token required)
+
+```json
+{
+	"name": "Downtown Grill",
+	"cuisine_type": "American",
+	"address": "100 Main St",
+	"city": "San Jose"
 }
 ```
 
