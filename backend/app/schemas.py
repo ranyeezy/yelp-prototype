@@ -94,11 +94,21 @@ class OwnerRestaurantSummaryOut(BaseModel):
     review_count: int
 
 
+class OwnerRecentReviewOut(BaseModel):
+    review_id: int
+    restaurant_id: int
+    restaurant_name: str
+    rating: int
+    comment: Optional[str] = None
+    created_at: datetime
+
+
 class OwnerDashboardOut(BaseModel):
     claimed_restaurants: int
     total_reviews: int
     avg_rating: Optional[float] = None
     restaurants: list[OwnerRestaurantSummaryOut]
+    recent_reviews: list[OwnerRecentReviewOut] = []
         
 #user preferences
 class UserPreferencesIn(BaseModel):
@@ -202,6 +212,17 @@ class ReviewOut(BaseModel):
         from_attributes = True
 
 
+class UserReviewHistoryOut(BaseModel):
+    id: int
+    restaurant_id: int
+    restaurant_name: str
+    restaurant_city: Optional[str] = None
+    rating: int
+    comment: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
 # favorites
 class FavoriteOut(BaseModel):
     id: int
@@ -243,4 +264,5 @@ class AIChatResponse(BaseModel):
     reply: str
     extracted_filters: dict
     recommendations: list[RecommendedRestaurant]
+    web_context: list[dict] = []
         
