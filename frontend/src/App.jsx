@@ -8,12 +8,14 @@ function App() {
   const [token, setToken] = useState('')
   const [currentUser, setCurrentUser] = useState(null)
   const [authMessage, setAuthMessage] = useState('')
+  const [authLoading, setAuthLoading] = useState(false)
 
   const [ownerAuthMode, setOwnerAuthMode] = useState('login')
   const [ownerForm, setOwnerForm] = useState({ name: '', email: '', password: '' })
   const [ownerToken, setOwnerToken] = useState('')
   const [currentOwner, setCurrentOwner] = useState(null)
   const [ownerMessage, setOwnerMessage] = useState('')
+  const [ownerAuthLoading, setOwnerAuthLoading] = useState(false)
   const [ownerClaimRestaurantId, setOwnerClaimRestaurantId] = useState('')
   const [ownerRestaurants, setOwnerRestaurants] = useState([])
   const [ownerDashboard, setOwnerDashboard] = useState(null)
@@ -24,6 +26,8 @@ function App() {
   const [loadingRestaurants, setLoadingRestaurants] = useState(false)
   const [myListings, setMyListings] = useState([])
   const [listingMessage, setListingMessage] = useState('')
+  const [listingSaving, setListingSaving] = useState(false)
+  const [listingActionId, setListingActionId] = useState(null)
   const [listingForm, setListingForm] = useState({
     name: '',
     cuisine_type: '',
@@ -39,6 +43,7 @@ function App() {
 
   const [favoriteRestaurantIds, setFavoriteRestaurantIds] = useState(new Set())
   const [favoritesMessage, setFavoritesMessage] = useState('')
+  const [favoriteActionId, setFavoriteActionId] = useState(null)
 
   const [preferencesForm, setPreferencesForm] = useState({
     cuisines: '',
@@ -51,11 +56,13 @@ function App() {
     sort_preference: '',
   })
   const [preferencesMessage, setPreferencesMessage] = useState('')
+  const [preferencesSaving, setPreferencesSaving] = useState(false)
 
   const [activeRestaurantId, setActiveRestaurantId] = useState(null)
   const [reviews, setReviews] = useState([])
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' })
   const [reviewMessage, setReviewMessage] = useState('')
+  const [reviewSaving, setReviewSaving] = useState(false)
 
   const [aiInput, setAiInput] = useState('')
   const [aiConversation, setAiConversation] = useState([])
@@ -256,6 +263,7 @@ function App() {
   const onAuthSubmit = async (event) => {
     event.preventDefault()
     setAuthMessage('')
+    setAuthLoading(true)
     try {
       if (authMode === 'signup') {
         await apiRequest('/auth/users/signup', {
@@ -277,6 +285,8 @@ function App() {
       setAuthMessage('Authenticated successfully.')
     } catch (error) {
       setAuthMessage(error.message)
+    } finally {
+      setAuthLoading(false)
     }
   }
 
@@ -287,6 +297,7 @@ function App() {
       return
     }
 
+    setFavoriteActionId(restaurantId)
     try {
       if (favoriteRestaurantIds.has(restaurantId)) {
         await apiRequest(`/favorites/${restaurantId}`, { method: 'DELETE' })
@@ -296,6 +307,8 @@ function App() {
       await loadFavorites()
     } catch (error) {
       setFavoritesMessage(error.message)
+    } finally {
+      setFavoriteActionId(null)
     }
   }
 
@@ -313,6 +326,7 @@ function App() {
       return
     }
 
+    setReviewSaving(true)
     try {
       await apiRequest('/reviews', {
         method: 'POST',
@@ -328,6 +342,8 @@ function App() {
       await loadReviews(activeRestaurantId)
     } catch (error) {
       setReviewMessage(error.message)
+    } finally {
+      setReviewSaving(false)
     }
   }
 
@@ -339,6 +355,16 @@ function App() {
       return
     }
 
+    if (
+      preferencesForm.price_min &&
+      preferencesForm.price_max &&
+      Number(preferencesForm.price_min) > Number(preferencesForm.price_max)
+    ) {
+      setPreferencesMessage('Price min cannot be greater than price max.')
+      return
+    }
+
+    setPreferencesSaving(true)
     try {
       await apiRequest('/preferences/me', {
         method: 'PUT',
@@ -357,6 +383,8 @@ function App() {
       setPreferencesMessage('Preferences saved successfully.')
     } catch (error) {
       setPreferencesMessage(error.message)
+    } finally {
+      setPreferencesSaving(false)
     }
   }
 
@@ -369,6 +397,15 @@ function App() {
       return
     }
 
+    if (listingForm.price_tier) {
+      const parsedTier = Number(listingForm.price_tier)
+      if (!Number.isInteger(parsedTier) || parsedTier < 1 || parsedTier > 4) {
+        setListingMessage('Price tier must be a whole number between 1 and 4.')
+        return
+      }
+    }
+
+    setListingSaving(true)
     try {
       const payload = {
         name: listingForm.name,
@@ -402,6 +439,8 @@ function App() {
       await loadMyListings()
     } catch (error) {
       setListingMessage(error.message)
+    } finally {
+      setListingSaving(false)
     }
   }
 
@@ -415,6 +454,15 @@ function App() {
 
   const saveListingEdit = async (listingId) => {
     setListingMessage('')
+    if (editingListingForm.price_tier) {
+      const parsedTier = Number(editingListingForm.price_tier)
+      if (!Number.isInteger(parsedTier) || parsedTier < 1 || parsedTier > 4) {
+        setListingMessage('Edited price tier must be a whole number between 1 and 4.')
+        return
+      }
+    }
+
+    setListingActionId(listingId)
     try {
       await apiRequest(`/restaurants/${listingId}`, {
         method: 'PUT',
@@ -430,11 +478,14 @@ function App() {
       await loadMyListings()
     } catch (error) {
       setListingMessage(error.message)
+    } finally {
+      setListingActionId(null)
     }
   }
 
   const deleteListing = async (listingId) => {
     setListingMessage('')
+    setListingActionId(listingId)
     try {
       await apiRequest(`/restaurants/${listingId}`, { method: 'DELETE' })
       setListingMessage('Listing removed successfully.')
@@ -445,6 +496,8 @@ function App() {
       await loadMyListings()
     } catch (error) {
       setListingMessage(error.message)
+    } finally {
+      setListingActionId(null)
     }
   }
 
@@ -457,6 +510,7 @@ function App() {
   const onOwnerAuthSubmit = async (event) => {
     event.preventDefault()
     setOwnerMessage('')
+    setOwnerAuthLoading(true)
     try {
       if (ownerAuthMode === 'signup') {
         await apiRequest('/auth/owners/signup', {
@@ -481,6 +535,8 @@ function App() {
       setOwnerMessage('Owner authenticated successfully.')
     } catch (error) {
       setOwnerMessage(error.message)
+    } finally {
+      setOwnerAuthLoading(false)
     }
   }
 
@@ -580,8 +636,11 @@ function App() {
             value={apiBaseUrl}
             onChange={(event) => setApiBaseUrl(event.target.value)}
             placeholder="http://127.0.0.1:8000"
+            aria-label="Backend API base URL"
           />
-          <button onClick={loadRestaurants}>Reload Restaurants</button>
+          <button onClick={loadRestaurants} disabled={loadingRestaurants}>
+            {loadingRestaurants ? 'Loading...' : 'Reload Restaurants'}
+          </button>
           <span className="status-chip">User: {currentUser ? 'Connected' : 'Guest'}</span>
           <span className="status-chip">Owner: {currentOwner ? 'Connected' : 'Guest'}</span>
         </div>
@@ -633,8 +692,12 @@ function App() {
             />
           </div>
           <div className="row wrap">
-            <button type="submit">Save Preferences</button>
-            <button type="button" onClick={loadPreferences}>Reload Preferences</button>
+            <button type="submit" disabled={preferencesSaving || !token}>
+              {preferencesSaving ? 'Saving...' : 'Save Preferences'}
+            </button>
+            <button type="button" onClick={loadPreferences} disabled={!token}>
+              Reload Preferences
+            </button>
           </div>
         </form>
         {preferencesMessage && <p className="info">{preferencesMessage}</p>}
@@ -672,7 +735,13 @@ function App() {
               type="password"
               required
             />
-            <button type="submit">{authMode === 'signup' ? 'Create Account + Login' : 'Login'}</button>
+            <button type="submit" disabled={authLoading}>
+              {authLoading
+                ? 'Please wait...'
+                : authMode === 'signup'
+                  ? 'Create Account + Login'
+                  : 'Login'}
+            </button>
           </form>
 
           {currentUser && <p className="success">Logged in as: {currentUser.name} ({currentUser.email})</p>}
@@ -711,7 +780,13 @@ function App() {
               type="password"
               required
             />
-            <button type="submit">{ownerAuthMode === 'signup' ? 'Create Owner + Login' : 'Owner Login'}</button>
+            <button type="submit" disabled={ownerAuthLoading}>
+              {ownerAuthLoading
+                ? 'Please wait...'
+                : ownerAuthMode === 'signup'
+                  ? 'Create Owner + Login'
+                  : 'Owner Login'}
+            </button>
           </form>
 
           <div className="row wrap">
@@ -720,7 +795,9 @@ function App() {
               onChange={(event) => setOwnerClaimRestaurantId(event.target.value)}
               placeholder="Restaurant ID to claim"
             />
-            <button onClick={() => claimRestaurantForOwner(Number(ownerClaimRestaurantId))}>Claim by ID</button>
+            <button onClick={() => claimRestaurantForOwner(Number(ownerClaimRestaurantId))} disabled={!ownerToken}>
+              Claim by ID
+            </button>
           </div>
 
           {currentOwner && <p className="success">Owner logged in as: {currentOwner.name}</p>}
@@ -741,6 +818,10 @@ function App() {
                 <strong>{ownerDashboard.avg_rating ?? 'N/A'}</strong>
               </article>
             </div>
+          )}
+
+          {ownerToken && ownerRestaurants.length === 0 && (
+            <p className="info">No claimed restaurants yet. Claim one from the Restaurants section.</p>
           )}
         </section>
       </div>
@@ -794,9 +875,15 @@ function App() {
             value={listingForm.description}
             onChange={(event) => setListingForm((prev) => ({ ...prev, description: event.target.value }))}
           />
-          <button type="submit">Create Listing</button>
+          <button type="submit" disabled={listingSaving}>
+            {listingSaving ? 'Creating...' : 'Create Listing'}
+          </button>
         </form>
         {listingMessage && <p className="info">{listingMessage}</p>}
+
+        {token && myListings.length === 0 && (
+          <p className="info">You have no listings yet. Create your first restaurant above.</p>
+        )}
 
         <div className="restaurant-grid">
           {myListings.map((listing) => (
@@ -820,8 +907,8 @@ function App() {
                     placeholder="Edit price tier"
                   />
                   <div className="row wrap">
-                    <button onClick={() => saveListingEdit(listing.id)}>Save</button>
-                    <button onClick={() => setEditingListingId(null)}>Cancel</button>
+                    <button onClick={() => saveListingEdit(listing.id)} disabled={listingActionId === listing.id}>Save</button>
+                    <button onClick={() => setEditingListingId(null)} disabled={listingActionId === listing.id}>Cancel</button>
                   </div>
                 </div>
               ) : (
@@ -829,8 +916,8 @@ function App() {
                   {listing.description && <p>{listing.description}</p>}
                   <p>Price Tier: {listing.price_tier ?? 'N/A'}</p>
                   <div className="row wrap">
-                    <button onClick={() => startEditListing(listing)}>Edit</button>
-                    <button onClick={() => deleteListing(listing.id)}>Delete</button>
+                    <button onClick={() => startEditListing(listing)} disabled={listingActionId === listing.id}>Edit</button>
+                    <button onClick={() => deleteListing(listing.id)} disabled={listingActionId === listing.id}>Delete</button>
                   </div>
                 </>
               )}
@@ -857,12 +944,13 @@ function App() {
             value={restaurantQuery.cuisine_type}
             onChange={(event) => setRestaurantQuery((prev) => ({ ...prev, cuisine_type: event.target.value }))}
           />
-          <button onClick={loadRestaurants}>Search</button>
+          <button onClick={loadRestaurants} disabled={loadingRestaurants}>Search</button>
         </div>
 
         {loadingRestaurants && <p className="info">Loading restaurants...</p>}
         {restaurantsMessage && <p className="info">{restaurantsMessage}</p>}
         {favoritesMessage && <p className="info">{favoritesMessage}</p>}
+        {!loadingRestaurants && restaurants.length === 0 && <p className="info">No restaurants to display yet.</p>}
 
         <div className="restaurant-grid">
           {restaurants.map((restaurant) => (
@@ -875,10 +963,10 @@ function App() {
               {restaurant.description && <p>{restaurant.description}</p>}
               <div className="row wrap">
                 <button onClick={() => setActiveRestaurantId(restaurant.id)}>View Reviews</button>
-                <button onClick={() => toggleFavorite(restaurant.id)}>
+                <button onClick={() => toggleFavorite(restaurant.id)} disabled={favoriteActionId === restaurant.id}>
                   {favoriteRestaurantIds.has(restaurant.id) ? 'Unfavorite' : 'Favorite'}
                 </button>
-                <button onClick={() => claimRestaurantForOwner(restaurant.id)}>Claim (Owner)</button>
+                <button onClick={() => claimRestaurantForOwner(restaurant.id)} disabled={!ownerToken}>Claim (Owner)</button>
               </div>
             </article>
           ))}
@@ -905,9 +993,15 @@ function App() {
               value={reviewForm.comment}
               onChange={(event) => setReviewForm((prev) => ({ ...prev, comment: event.target.value }))}
             />
-            <button type="submit">Post Review</button>
+            <button type="submit" disabled={reviewSaving || !token || !activeRestaurantId}>
+              {reviewSaving ? 'Posting...' : 'Post Review'}
+            </button>
           </form>
           {reviewMessage && <p className="info">{reviewMessage}</p>}
+
+          {activeRestaurant && reviews.length === 0 && (
+            <p className="info">No reviews yet. Be the first to review this place.</p>
+          )}
 
           <div className="list">
             {reviews.map((review) => (
@@ -934,6 +1028,10 @@ function App() {
 
           {aiMessage && <p className="info">{aiMessage}</p>}
 
+          {aiConversation.length === 0 && (
+            <p className="info">Start by asking for a cuisine, city, budget, or dietary preference.</p>
+          )}
+
           {aiFilters && (
             <div className="card">
               <h3>Extracted Filters</h3>
@@ -958,6 +1056,10 @@ function App() {
               </article>
             ))}
           </div>
+
+          {aiConversation.length > 0 && aiRecommendations.length === 0 && !aiLoading && (
+            <p className="info">No recommendation cards yet. Try adding more specific filters.</p>
+          )}
         </section>
       </div>
 
