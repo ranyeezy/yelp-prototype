@@ -984,6 +984,22 @@ function App() {
 
   const formattedFilters = aiFilters ? JSON.stringify(aiFilters, null, 2) : ''
 
+  const cuisineCovers = {
+    italian: 'https://images.unsplash.com/photo-1521389508051-d7ffb5dc8dfb?auto=format&fit=crop&w=1400&q=80',
+    chinese: 'https://images.unsplash.com/photo-1526318896980-cf78c088247c?auto=format&fit=crop&w=1400&q=80',
+    mexican: 'https://images.unsplash.com/photo-1615870216519-2f9fa575fa5c?auto=format&fit=crop&w=1400&q=80',
+    indian: 'https://images.unsplash.com/photo-1585937421612-70a008356fbe?auto=format&fit=crop&w=1400&q=80',
+    japanese: 'https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?auto=format&fit=crop&w=1400&q=80',
+    american: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1400&q=80',
+    thai: 'https://images.unsplash.com/photo-1559314809-0d155014e29e?auto=format&fit=crop&w=1400&q=80',
+    default: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1400&q=80',
+  }
+
+  const getRestaurantImage = (restaurant) => {
+    const key = String(restaurant?.cuisine_type ?? '').trim().toLowerCase()
+    return cuisineCovers[key] ?? cuisineCovers.default
+  }
+
   return (
     <div className="app-shell">
       <header className="hero">
@@ -1096,7 +1112,7 @@ function App() {
             <img
               src={profileForm.profile_photo.startsWith('http') ? profileForm.profile_photo : `${apiBaseUrl}${profileForm.profile_photo}`}
               alt="User profile"
-              style={{ width: '96px', height: '96px', borderRadius: '10px', objectFit: 'cover' }}
+              className="profile-photo-preview"
             />
           )}
           <textarea
@@ -1449,6 +1465,7 @@ function App() {
         <div className="restaurant-grid">
           {myListings.map((listing) => (
             <article key={`my-${listing.id}`} className="restaurant-card">
+              <div className="restaurant-card-cover" style={{ backgroundImage: `url(${getRestaurantImage(listing)})` }} />
               <div className="restaurant-head">
                 <h3>{listing.name}</h3>
                 <span className="chip">{listing.cuisine_type}</span>
@@ -1509,6 +1526,7 @@ function App() {
         <div className="restaurant-grid">
           {favoriteRestaurants.map((restaurant) => (
             <article key={`fav-${restaurant.id}`} className="restaurant-card">
+              <div className="restaurant-card-cover" style={{ backgroundImage: `url(${getRestaurantImage(restaurant)})` }} />
               <div className="restaurant-head">
                 <h3>{restaurant.name}</h3>
                 <span className="chip">{restaurant.cuisine_type}</span>
@@ -1552,6 +1570,7 @@ function App() {
         <div className="restaurant-grid">
           {restaurants.map((restaurant) => (
             <article key={restaurant.id} className="restaurant-card">
+              <div className="restaurant-card-cover" style={{ backgroundImage: `url(${getRestaurantImage(restaurant)})` }} />
               <div className="restaurant-head">
                 <h3>{restaurant.name}</h3>
                 <span className="chip">{restaurant.cuisine_type}</span>
@@ -1690,7 +1709,8 @@ function App() {
 
           <div className="list">
             {aiRecommendations.map((restaurant) => (
-              <article key={restaurant.id} className="card">
+              <article key={restaurant.id} className="restaurant-card ai-recommendation-card">
+                <div className="restaurant-card-cover" style={{ backgroundImage: `url(${getRestaurantImage(restaurant)})` }} />
                 <h3>{restaurant.name}</h3>
                 <p>{restaurant.cuisine_type} • {restaurant.city}</p>
                 <p>Price Tier: {restaurant.price_tier ?? 'N/A'} | Score: {restaurant.score}</p>
@@ -1712,6 +1732,7 @@ function App() {
           <div className="restaurant-grid">
             {ownerRestaurants.map((restaurant) => (
               <article key={`owner-${restaurant.id}`} className="restaurant-card">
+                <div className="restaurant-card-cover" style={{ backgroundImage: `url(${getRestaurantImage(restaurant)})` }} />
                 <h3>{restaurant.name}</h3>
                 <p className="muted">{restaurant.cuisine_type} • {restaurant.city}</p>
                 <p>Avg Rating: {restaurant.avg_rating ?? 'N/A'}</p>
