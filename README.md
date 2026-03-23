@@ -1,21 +1,53 @@
-## Yelp Prototype
+# 🍽️ Yelp Prototype
 
-Yelp-style full-stack lab project with:
+A full-stack restaurant discovery and review platform. Users can explore restaurants, write reviews, manage favorites, and get AI-powered recommendations. Restaurant owners get a dedicated dashboard to track feedback and analytics.
 
-- FastAPI + SQLAlchemy backend
-- React + Vite frontend
-- JWT authentication for users and owners
-- Restaurant discovery, reviews, favorites, owner dashboard, and AI assistant
+---
 
-## Prerequisites
+## 🧱 Tech Stack
 
-- Python 3.10+
-- Node.js 18+
-- MySQL 8+ (or compatible MySQL server)
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React + Vite |
+| Backend | Python + FastAPI |
+| Database | MySQL |
+| Auth | JWT (separate flows for users & owners) |
+| AI | LangChain + Tavily web search |
+| Media | FastAPI StaticFiles for uploaded images |
 
-## 1) Backend setup and run
+---
 
-From the project root:
+## 📋 Prerequisites
+
+Before running locally, make sure you have:
+
+- **Python 3.10+**
+- **Node.js 18+** *(required to run the React frontend)*
+- **MySQL 8+** running locally
+
+---
+
+## 🗄️ Step 1 — MySQL Database Setup
+
+Open your MySQL shell (`mysql -u root -p`) and run these commands once:
+
+```sql
+CREATE DATABASE yelp_prototype
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+CREATE USER 'yelp_user'@'localhost' IDENTIFIED BY 'yelp_pass_123';
+
+GRANT ALL PRIVILEGES ON yelp_prototype.* TO 'yelp_user'@'localhost';
+
+FLUSH PRIVILEGES;
+
+EXIT;
+```
+
+---
+
+## ⚙️ Step 2 — Backend Setup
 
 ```bash
 cd backend
@@ -24,32 +56,40 @@ cd backend
 Create `backend/.env`:
 
 ```env
-DATABASE_URL=mysql+pymysql://<user>:<password>@<host>:<port>/<db_name>
-JWT_SECRET=<long-random-secret>
-TAVILY_API_KEY=<optional-for-web-context-enrichment>
+DATABASE_URL=mysql+pymysql://yelp_user:yelp_pass_123@localhost:3306/yelp_prototype
+JWT_SECRET=my_super_secret_jwt_key_change_in_prod
+TAVILY_API_KEY=your_tavily_key_here
 ```
 
-Install dependencies:
+> `TAVILY_API_KEY` is optional — the AI assistant works without it but will not pull live web results.
+
+Install Python dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Run the backend server:
+Start the backend server:
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Backend should be available at:
+✅ Backend is live at:
 
-- API base: `http://127.0.0.1:8000`
-- Swagger: `http://127.0.0.1:8000/docs`
-- ReDoc: `http://127.0.0.1:8000/redoc`
+| Resource | URL |
+|----------|-----|
+| API base | `http://127.0.0.1:8000` |
+| Swagger UI | `http://127.0.0.1:8000/docs` |
+| ReDoc | `http://127.0.0.1:8000/redoc` |
 
-## 2) Frontend setup and run
+> Database tables are created automatically on first startup.
 
-Open a new terminal from project root:
+---
+
+## 🎨 Step 3 — Frontend Setup
+
+In a new terminal:
 
 ```bash
 cd frontend
@@ -57,147 +97,200 @@ npm install
 npm run dev
 ```
 
-Frontend dev server runs at Vite's local URL (typically `http://127.0.0.1:5173` or `http://localhost:5173`).
+✅ Frontend starts at `http://localhost:5173`
 
-In the app UI, set API base URL to:
+When prompted in the app, set the **API Base URL** to `http://127.0.0.1:8000`
 
-- `http://127.0.0.1:8000`
+---
 
-Optional production build check:
+## 🚀 End-to-End Verification Flow
 
-```bash
-npm run build
-```
+1. Open `http://127.0.0.1:8000/docs` — confirm Swagger loads
+2. Open `http://localhost:5173` — confirm the homepage loads
+3. **Sign up** as a new user → log in → browse restaurants
+4. **Search** restaurants by name, cuisine, keywords, or city
+5. **Add a favorite** and view it in your Favorites tab
+6. **Write a review** with a star rating and optional photo
+7. **Update your profile** and configure dining preferences
+8. **Open AI Assistant** → ask for personalized restaurant recommendations
+9. **Sign up as an owner** → claim a restaurant → view your analytics dashboard
 
-## 3) Quick verification flow
+---
 
-1. Start backend (`uvicorn`) and confirm `GET /docs` loads.
-2. Start frontend (`npm run dev`) and open the Vite URL.
-3. Sign up/login as a user.
-4. Search restaurants, add favorites, and create a review.
-5. Login as an owner, claim a restaurant, and open owner dashboard.
-6. Open AI assistant and submit a recommendation query.
+## 🗺️ API Reference
 
-## Implemented API routes
+<details>
+<summary><strong>Auth</strong></summary>
 
-### Auth
-- `POST /auth/users/signup`
-- `POST /auth/users/login`
-- `POST /auth/owners/signup`
-- `POST /auth/owners/login`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/users/signup` | Register a new user |
+| POST | `/auth/users/login` | User login — returns JWT |
+| POST | `/auth/owners/signup` | Register a new owner |
+| POST | `/auth/owners/login` | Owner login — returns JWT |
 
-### User and owner profile
-- `GET /users/me`
-- `PUT /users/me`
-- `GET /owners/me`
-- `PUT /owners/me`
+</details>
 
-### Owner restaurant management
-- `POST /owners/restaurants/{restaurant_id}/claim`
-- `GET /owners/restaurants`
-- `GET /owners/dashboard`
+<details>
+<summary><strong>Users and Owners</strong></summary>
 
-### Preferences
-- `GET /preferences/me`
-- `PUT /preferences/me`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/users/me` | Get current user profile |
+| PUT | `/users/me` | Update user profile |
+| GET | `/owners/me` | Get current owner profile |
+| PUT | `/owners/me` | Update owner profile |
 
-### Restaurants
-- `POST /restaurants`
-- `GET /restaurants`
-- `GET /restaurants/{restaurant_id}`
-- `PUT /restaurants/{restaurant_id}`
-- `DELETE /restaurants/{restaurant_id}`
+</details>
 
-### Reviews
-- `POST /reviews`
-- `GET /reviews/restaurant/{restaurant_id}`
-- `GET /reviews/me`
-- `PUT /reviews/{review_id}`
-- `DELETE /reviews/{review_id}`
+<details>
+<summary><strong>Restaurants</strong></summary>
 
-### Favorites
-- `POST /favorites/{restaurant_id}`
-- `GET /favorites/me`
-- `DELETE /favorites/{restaurant_id}`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/restaurants` | Add a new restaurant |
+| GET | `/restaurants` | List and search restaurants |
+| GET | `/restaurants/{id}` | Get restaurant detail |
+| PUT | `/restaurants/{id}` | Update a restaurant |
+| DELETE | `/restaurants/{id}` | Delete a restaurant |
 
-### AI assistant
-- `POST /ai-assistant/chat`
+</details>
 
-## Quick request examples
+<details>
+<summary><strong>Reviews</strong></summary>
 
-### User signup
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/reviews` | Submit a review |
+| GET | `/reviews/restaurant/{id}` | Get reviews for a restaurant |
+| GET | `/reviews/me` | Get current user review history |
+| PUT | `/reviews/{id}` | Update own review |
+| DELETE | `/reviews/{id}` | Delete own review |
+| POST | `/reviews/uploads/photo` | Upload a review photo |
 
-`POST /auth/users/signup`
+</details>
 
+<details>
+<summary><strong>Favorites</strong></summary>
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/favorites/{restaurant_id}` | Mark restaurant as favorite |
+| GET | `/favorites/me` | List your favorites |
+| DELETE | `/favorites/{restaurant_id}` | Remove from favorites |
+
+</details>
+
+<details>
+<summary><strong>Preferences</strong></summary>
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/preferences/me` | Get saved user preferences |
+| PUT | `/preferences/me` | Save user preferences |
+
+</details>
+
+<details>
+<summary><strong>Owner Dashboard</strong></summary>
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/owners/restaurants/{id}/claim` | Claim a restaurant listing |
+| GET | `/owners/restaurants` | List claimed restaurants |
+| GET | `/owners/dashboard` | Analytics and recent reviews |
+
+</details>
+
+<details>
+<summary><strong>AI Assistant</strong></summary>
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/ai-assistant/chat` | Multi-turn restaurant recommendation chat |
+
+</details>
+
+---
+
+## 💡 Sample Requests
+
+**User Signup**
 ```json
+POST /auth/users/signup
 {
-	"name": "Alice",
-	"email": "alice@example.com",
-	"password": "pass1234"
+  "name": "Alex",
+  "email": "alex@example.com",
+  "password": "secure123"
 }
 ```
 
-### Create review
-
-`POST /reviews` (Bearer token required)
-
+**Submit a Review** *(Bearer token required)*
 ```json
+POST /reviews
 {
-	"restaurant_id": 1,
-	"rating": 5,
-	"comment": "Amazing food and service"
+  "restaurant_id": 1,
+  "rating": 5,
+  "comment": "Outstanding food and atmosphere."
 }
 ```
 
-### Create restaurant
-
-`POST /restaurants` (Bearer token required)
-
+**Add a Restaurant** *(Bearer token required)*
 ```json
+POST /restaurants
 {
-	"name": "Downtown Grill",
-	"cuisine_type": "American",
-	"address": "100 Main St",
-	"city": "San Jose"
+  "name": "The Golden Spoon",
+  "cuisine_type": "Mediterranean",
+  "address": "200 Market St",
+  "city": "San Jose"
 }
 ```
 
-### Add favorite
-
-`POST /favorites/1` (Bearer token required)
-
-### Owner claim a restaurant
-
-`POST /owners/restaurants/1/claim` (Owner Bearer token required)
-
-### AI assistant chat
-
-`POST /ai-assistant/chat` (Bearer token required)
-
+**AI Chat** *(Bearer token required)*
 ```json
+POST /ai-assistant/chat
 {
-	"message": "Find me affordable Indian food in San Jose",
-	"conversation_history": []
+  "message": "I want spicy Thai food under $20 in downtown San Jose",
+  "conversation_history": []
 }
 ```
 
-## Notes
+---
 
-- Backend dependencies are pinned in `backend/requirements.txt`.
-- Database tables auto-create on app startup via SQLAlchemy metadata.
-- AI endpoint includes LangChain-based filter parsing and optional Tavily web context when `TAVILY_API_KEY` is configured.
+## 📁 Project Structure
 
-## Frontend demo flows
+```
+yelp-prototype/
+├── backend/
+│   ├── app/
+│   │   ├── main.py            # FastAPI app entry point
+│   │   ├── models.py          # Database models
+│   │   ├── schemas.py         # Request and response schemas
+│   │   ├── database.py        # DB connection setup
+│   │   ├── security.py        # Password hashing and JWT
+│   │   ├── deps.py            # Auth dependency injection
+│   │   ├── ai_chat_service.py # LangChain AI integration
+│   │   ├── crud_*.py          # CRUD logic per resource
+│   │   └── routers/           # Route handlers per feature
+│   ├── uploads/               # Uploaded images (restaurants, reviews, profiles)
+│   └── requirements.txt
+└── frontend/
+    └── src/
+        ├── pages/
+        │   ├── public/        # Explore page and restaurant details
+        │   ├── user/          # Authenticated user pages
+        │   └── owner/         # Authenticated owner pages
+        ├── components/        # Shared UI components
+        └── App.jsx            # Router and app entry
+```
 
-- User auth (signup/login)
-- Restaurant search/listing
-- Favorites add/remove
-- Reviews create/list
-- Owner login, claim restaurant, dashboard view
-- AI assistant chat recommendations
+---
 
-## Current implementation status
+## 🔒 Notes
 
-- Backend APIs for auth, users/owners, restaurants, reviews, favorites, preferences, owner analytics, and AI assistant are implemented.
-- Frontend includes user and owner authentication, restaurant discovery, listing management, favorites, reviews, preferences, and AI chat flows.
-- UI has responsive Yelp-inspired styling and includes lab pair attribution in the dashboard.
+- Passwords are hashed with **bcrypt** — plaintext passwords are never stored.
+- JWT tokens are signed and expire; clients must re-authenticate to renew access.
+- Uploaded media is stored in `backend/uploads/` and served at `/uploads/<filename>`.
+- The `DATABASE_URL` in `.env` must match the MySQL credentials created in Step 1 exactly.
+- Tables are auto-created on first startup — no separate migration step required.
+- API documentation is available via Swagger at `/docs` once the backend is running.
