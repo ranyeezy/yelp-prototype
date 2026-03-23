@@ -17,3 +17,13 @@ __pycache__/
 *.py[cod]
 venv/
 .venv/
+
+# Database files
+*.db
+*.sqlite3
+
+# Uploaded media (runtime-generated, not source code)
+backend/uploads/
+
+# Custom images (local assets, not committed)
+frontend/public/custom-images/
