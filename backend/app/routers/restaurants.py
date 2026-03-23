@@ -1,10 +1,35 @@
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from pathlib import Path
+import uuid
+
+from fastapi import APIRouter, Depends, Query, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from ..deps import get_db, get_current_user
 from .. import schemas
 from .. import crud_restaurants as crud
 
 router = APIRouter(prefix="/restaurants", tags=["restaurants"])
+UPLOADS_DIR = Path(__file__).resolve().parents[2] / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@router.post("/uploads/photo", response_model=schemas.RestaurantPhotoUploadOut)
+def upload_restaurant_photo(
+    photo: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+):
+    if not photo.filename:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Photo filename is required")
+
+    extension = Path(photo.filename).suffix.lower()
+    if extension not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type")
+
+    unique_name = f"restaurant_{current_user.id}_{uuid.uuid4().hex}{extension}"
+    destination = UPLOADS_DIR / unique_name
+    with destination.open("wb") as output_file:
+        output_file.write(photo.file.read())
+
+    return schemas.RestaurantPhotoUploadOut(photo_url=f"/uploads/{unique_name}")
 
 @router.post("", response_model=schemas.RestaurantOut, status_code=201)
 def create_restaurant(

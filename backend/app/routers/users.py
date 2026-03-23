@@ -13,7 +13,10 @@ UPLOADS_DIR = Path(__file__).resolve().parents[2] / "uploads"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 @router.get("/me", response_model=schemas.UserOut)
-def get_me(current_user=Depends(get_current_user)):
+def get_me(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     return current_user
 
 @router.put("/me", response_model=schemas.UserOut)

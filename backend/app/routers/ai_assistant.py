@@ -23,15 +23,16 @@ def chat_with_assistant(
 
     recommendations = [
         schemas.RecommendedRestaurant(
-            id=restaurant.id,
-            name=restaurant.name,
-            cuisine_type=restaurant.cuisine_type,
-            city=restaurant.city,
-            price_tier=restaurant.price_tier,
-            score=round(score, 2),
-            reason=reason,
+            id=item["restaurant"].id,
+            name=item["restaurant"].name,
+            cuisine_type=item["restaurant"].cuisine_type,
+            city=item["restaurant"].city,
+            rating=item.get("rating"),
+            price_tier=item["restaurant"].price_tier,
+            score=round(float(item["score"]), 2),
+            reason=str(item["reason"]),
         )
-        for restaurant, score, reason in ranked
+        for item in ranked
     ]
 
     return schemas.AIChatResponse(

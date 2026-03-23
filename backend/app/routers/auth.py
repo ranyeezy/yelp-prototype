@@ -16,7 +16,7 @@ def user_login(payload: schemas.UserLogin, db: Session = Depends(get_db)):
     user = crud.authenticate_user(db, payload.email, payload.password)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token = create_access_token(subject=str(user.id))
+    token = create_access_token(subject=str(user.id), role="user")
     return {"access_token": token, "token_type": "bearer"}
 
 #owners
@@ -29,5 +29,5 @@ def owner_login(payload: schemas.OwnerLogin, db: Session = Depends(get_db)):
     owner = crud.authenticate_owner(db, payload.email, payload.password)
     if not owner:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token = create_access_token(subject=str(owner.id))
+    token = create_access_token(subject=str(owner.id), role="owner")
     return {"access_token": token, "token_type": "bearer"}
