@@ -1,26 +1,57 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
+import ExploreSearchPage from './pages/public/ExploreSearchPage'
+import RestaurantDetailsPage from './pages/public/RestaurantDetailsPage'
+import UserLoginPage from './pages/user/UserLoginPage'
+import UserSignupPage from './pages/user/UserSignupPage'
+import ProfilePreferencesPage from './pages/user/ProfilePreferencesPage'
+import AddRestaurantPage from './pages/user/AddRestaurantPage'
+import WriteReviewPage from './pages/user/WriteReviewPage'
+import AIAssistantPage from './pages/user/AIAssistantPage'
+import FavouritesPage from './pages/user/FavouritesPage'
+import UserHistoryPage from './pages/user/UserHistoryPage'
+import OwnerLoginPage from './pages/owner/OwnerLoginPage'
+import OwnerSignupPage from './pages/owner/OwnerSignupPage'
+import OwnerProfilePage from './pages/owner/OwnerProfilePage'
+import OwnerManageRestaurantPage from './pages/owner/OwnerManageRestaurantPage'
+import OwnerClaimPage from './pages/owner/OwnerClaimPage'
+import OwnerReviewsDashboardPage from './pages/owner/OwnerReviewsDashboardPage'
+import OwnerAnalyticsPage from './pages/owner/OwnerAnalyticsPage'
+import OwnerLayout from './components/OwnerLayout'
+
+const emptyProfileEditorForm = {
+  name: '',
+  email: '',
+  phone: '',
+  about_me: '',
+  city: '',
+  state: '',
+  country: '',
+  languages: '',
+  gender: '',
+  profile_photo: '',
+}
+
+const emptyPreferencesEditorForm = {
+  cuisines: '',
+  price_min: '',
+  price_max: '',
+  preferred_locations: '',
+  search_radius: '',
+  dietary_needs: '',
+  ambiance: '',
+  sort_preference: '',
+}
 
 function App() {
-  const [apiBaseUrl, setApiBaseUrl] = useState('http://127.0.0.1:8000')
-  const [authMode, setAuthMode] = useState('login')
+  const [apiBaseUrl] = useState('http://127.0.0.1:8000')
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' })
   const [token, setToken] = useState('')
   const [currentUser, setCurrentUser] = useState(null)
   const [authMessage, setAuthMessage] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
-  const [profileForm, setProfileForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    about_me: '',
-    city: '',
-    state: '',
-    country: '',
-    languages: '',
-    gender: '',
-    profile_photo: '',
-  })
+  const [profileForm, setProfileForm] = useState(emptyProfileEditorForm)
   const [profileMessage, setProfileMessage] = useState('')
   const [profileSaving, setProfileSaving] = useState(false)
   const [profilePhotoFile, setProfilePhotoFile] = useState(null)
@@ -51,9 +82,30 @@ function App() {
     price_tier: '',
     hours: '',
     amenities: '',
+    photo_url: '',
+  })
+  const [ownerNewRestaurantForm, setOwnerNewRestaurantForm] = useState({
+    name: '',
+    cuisine_type: '',
+    address: '',
+    city: '',
+    state: '',
+    zip: '',
+    country: '',
+    description: '',
+    phone: '',
+    price_tier: '',
+    hours: '',
+    amenities: '',
+    photo_url: '',
   })
   const [ownerRestaurantSaving, setOwnerRestaurantSaving] = useState(false)
+  const [ownerNewRestaurantSaving, setOwnerNewRestaurantSaving] = useState(false)
+  const [ownerRestaurantPhotoUploading, setOwnerRestaurantPhotoUploading] = useState(false)
+  const [ownerNewRestaurantPhotoFile, setOwnerNewRestaurantPhotoFile] = useState(null)
+  const [ownerEditRestaurantPhotoFile, setOwnerEditRestaurantPhotoFile] = useState(null)
   const [ownerRestaurantReviews, setOwnerRestaurantReviews] = useState([])
+  const [globallyClaimedRestaurantIds, setGloballyClaimedRestaurantIds] = useState(new Set())
 
   const [restaurantQuery, setRestaurantQuery] = useState({ keyword: '', city: '', cuisine_type: '' })
   const [restaurants, setRestaurants] = useState([])
@@ -62,6 +114,8 @@ function App() {
   const [myListings, setMyListings] = useState([])
   const [listingMessage, setListingMessage] = useState('')
   const [listingSaving, setListingSaving] = useState(false)
+  const [listingPhotoFile, setListingPhotoFile] = useState(null)
+  const [listingPhotoUploading, setListingPhotoUploading] = useState(false)
   const [listingActionId, setListingActionId] = useState(null)
   const [listingForm, setListingForm] = useState({
     name: '',
@@ -70,8 +124,11 @@ function App() {
     city: '',
     state: '',
     zip: '',
+    phone: '',
+    hours: '',
     description: '',
     price_tier: '',
+    photo_url: '',
   })
   const [editingListingId, setEditingListingId] = useState(null)
   const [editingListingForm, setEditingListingForm] = useState({ description: '', price_tier: '' })
@@ -82,15 +139,9 @@ function App() {
   const [favoriteActionId, setFavoriteActionId] = useState(null)
 
   const [preferencesForm, setPreferencesForm] = useState({
-    cuisines: '',
-    price_min: '',
-    price_max: '',
-    preferred_locations: '',
-    search_radius: '',
-    dietary_needs: '',
-    ambiance: '',
-    sort_preference: '',
+    ...emptyPreferencesEditorForm,
   })
+  const [currentPreferences, setCurrentPreferences] = useState(null)
   const [preferencesMessage, setPreferencesMessage] = useState('')
   const [preferencesSaving, setPreferencesSaving] = useState(false)
 
@@ -102,19 +153,30 @@ function App() {
   const [editingReviewForm, setEditingReviewForm] = useState({ rating: 5, comment: '' })
   const [reviewMessage, setReviewMessage] = useState('')
   const [reviewSaving, setReviewSaving] = useState(false)
+  const [reviewPhotoFile, setReviewPhotoFile] = useState(null)
+  const [reviewPhotoUploading, setReviewPhotoUploading] = useState(false)
 
   const [aiInput, setAiInput] = useState('')
   const [aiConversation, setAiConversation] = useState([])
   const [aiRecommendations, setAiRecommendations] = useState([])
   const [aiFilters, setAiFilters] = useState(null)
+  const [aiWebContext, setAiWebContext] = useState([])
   const [aiMessage, setAiMessage] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+  const [isAiWidgetOpen, setIsAiWidgetOpen] = useState(false)
 
   const countryOptions = ['United States', 'Canada', 'Mexico', 'India', 'United Kingdom', 'Other']
+  const location = useLocation()
+  const navigate = useNavigate()
 
   const activeRestaurant = useMemo(
     () => restaurants.find((restaurant) => restaurant.id === activeRestaurantId) ?? null,
     [restaurants, activeRestaurantId],
+  )
+
+  const ownerClaimedRestaurantIds = useMemo(
+    () => new Set(ownerRestaurants.map((restaurant) => restaurant.id)),
+    [ownerRestaurants],
   )
 
   const apiRequest = useCallback(async (path, options = {}) => {
@@ -210,6 +272,7 @@ function App() {
         price_tier: '',
         hours: '',
         amenities: '',
+        photo_url: '',
       })
       setOwnerRestaurantReviews([])
       return
@@ -233,12 +296,22 @@ function App() {
         price_tier: restaurantData.price_tier ?? '',
         hours: restaurantData.hours ?? '',
         amenities: restaurantData.amenities ?? '',
+        photo_url: restaurantData.photo_url ?? '',
       })
       setOwnerRestaurantReviews(reviewsData)
     } catch {
       setOwnerRestaurantReviews([])
     }
   }, [ownerToken, selectedOwnerRestaurantId, apiRequest])
+
+  const loadGloballyClaimedIds = useCallback(async () => {
+    try {
+      const data = await apiRequest('/owners/claimed-restaurant-ids', { method: 'GET', authToken: '' })
+      setGloballyClaimedRestaurantIds(new Set(data))
+    } catch {
+      setGloballyClaimedRestaurantIds(new Set())
+    }
+  }, [apiRequest])
 
   const loadRestaurants = useCallback(async () => {
     setLoadingRestaurants(true)
@@ -278,31 +351,15 @@ function App() {
 
   const loadPreferences = useCallback(async () => {
     if (!token) {
-      setPreferencesForm({
-        cuisines: '',
-        price_min: '',
-        price_max: '',
-        preferred_locations: '',
-        search_radius: '',
-        dietary_needs: '',
-        ambiance: '',
-        sort_preference: '',
-      })
+      setCurrentPreferences(null)
+      setPreferencesForm(emptyPreferencesEditorForm)
       return
     }
 
     try {
       const data = await apiRequest('/preferences/me', { method: 'GET' })
-      setPreferencesForm({
-        cuisines: data.cuisines ?? '',
-        price_min: data.price_min ?? '',
-        price_max: data.price_max ?? '',
-        preferred_locations: data.preferred_locations ?? '',
-        search_radius: data.search_radius ?? '',
-        dietary_needs: data.dietary_needs ?? '',
-        ambiance: data.ambiance ?? '',
-        sort_preference: data.sort_preference ?? '',
-      })
+      setCurrentPreferences(data)
+      setPreferencesForm(emptyPreferencesEditorForm)
     } catch {
       setPreferencesMessage('Unable to load preferences right now.')
     }
@@ -349,7 +406,8 @@ function App() {
 
   useEffect(() => {
     loadRestaurants()
-  }, [loadRestaurants])
+    loadGloballyClaimedIds()
+  }, [loadRestaurants, loadGloballyClaimedIds])
 
   useEffect(() => {
     loadCurrentUser()
@@ -364,6 +422,13 @@ function App() {
   useEffect(() => {
     loadMyListings()
   }, [loadMyListings])
+
+  useEffect(() => {
+    if (!token) return
+    if (location.pathname !== '/profile') return
+    loadCurrentUser()
+    loadPreferences()
+  }, [token, location.pathname, loadCurrentUser, loadPreferences])
 
   useEffect(() => {
     loadCurrentOwner()
@@ -391,49 +456,38 @@ function App() {
   }, [activeRestaurantId, loadReviews])
 
   useEffect(() => {
-    if (!currentUser) {
-      setProfileForm({
-        name: '',
-        email: '',
-        phone: '',
-        about_me: '',
-        city: '',
-        state: '',
-        country: '',
-        languages: '',
-        gender: '',
-        profile_photo: '',
-      })
-      return
-    }
-
-    setProfileForm({
-      name: currentUser.name ?? '',
-      email: currentUser.email ?? '',
-      phone: currentUser.phone ?? '',
-      about_me: currentUser.about_me ?? '',
-      city: currentUser.city ?? '',
-      state: currentUser.state ?? '',
-      country: currentUser.country ?? '',
-      languages: currentUser.languages ?? '',
-      gender: currentUser.gender ?? '',
-      profile_photo: currentUser.profile_photo ?? '',
-    })
+    setProfileForm(emptyProfileEditorForm)
   }, [currentUser])
 
-  const onAuthSubmit = async (event) => {
+  const onUserSignupSubmit = async (event) => {
     event.preventDefault()
     setAuthMessage('')
     setAuthLoading(true)
     try {
-      if (authMode === 'signup') {
-        await apiRequest('/auth/users/signup', {
-          method: 'POST',
-          body: JSON.stringify(authForm),
-          headers: {},
-        })
-      }
+      await apiRequest('/auth/users/signup', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: authForm.name,
+          email: authForm.email,
+          password: authForm.password,
+        }),
+        headers: {},
+      })
+      setAuthMessage('Account created successfully. Please use User Login to sign in.')
+      setAuthForm((prev) => ({ ...prev, password: '' }))
+      navigate('/login')
+    } catch (error) {
+      setAuthMessage(error.message)
+    } finally {
+      setAuthLoading(false)
+    }
+  }
 
+  const onUserLoginSubmit = async (event) => {
+    event.preventDefault()
+    setAuthMessage('')
+    setAuthLoading(true)
+    try {
       const loginData = await apiRequest('/auth/users/login', {
         method: 'POST',
         body: JSON.stringify({
@@ -442,8 +496,21 @@ function App() {
         }),
         headers: {},
       })
+      const userData = await apiRequest('/users/me', {
+        method: 'GET',
+        authToken: loginData.access_token,
+      })
       setToken(loginData.access_token)
-      setAuthMessage('Authenticated successfully.')
+      setCurrentUser(userData)
+      // Clear owner session — only one role can be active at a time
+      setOwnerToken('')
+      setCurrentOwner(null)
+      setOwnerRestaurants([])
+      setOwnerDashboard(null)
+      setSelectedOwnerRestaurantId('')
+      setOwnerRestaurantReviews([])
+      setAuthMessage('Logged in successfully.')
+      navigate('/restaurants')
     } catch (error) {
       setAuthMessage(error.message)
     } finally {
@@ -488,24 +555,37 @@ function App() {
       return
     }
 
+    const payload = {}
+    const setIfProvided = (key, value) => {
+      const trimmed = String(value ?? '').trim()
+      if (trimmed) payload[key] = trimmed
+    }
+
+    setIfProvided('name', profileForm.name)
+    setIfProvided('email', profileForm.email)
+    setIfProvided('phone', profileForm.phone)
+    setIfProvided('about_me', profileForm.about_me)
+    setIfProvided('city', profileForm.city)
+    if (normalizedState) payload.state = normalizedState
+    setIfProvided('country', profileForm.country)
+    setIfProvided('languages', profileForm.languages)
+    setIfProvided('gender', profileForm.gender)
+    setIfProvided('profile_photo', profileForm.profile_photo)
+
+    if (Object.keys(payload).length === 0) {
+      setProfileMessage('Enter at least one field in Profile Editor to update.')
+      return
+    }
+
     setProfileSaving(true)
     try {
       const updated = await apiRequest('/users/me', {
         method: 'PUT',
-        body: JSON.stringify({
-          ...profileForm,
-          state: normalizedState || null,
-          phone: profileForm.phone || null,
-          about_me: profileForm.about_me || null,
-          city: profileForm.city || null,
-          country: profileForm.country || null,
-          languages: profileForm.languages || null,
-          gender: profileForm.gender || null,
-          profile_photo: profileForm.profile_photo || null,
-        }),
+        body: JSON.stringify(payload),
         headers: {},
       })
       setCurrentUser(updated)
+      setProfileForm(emptyProfileEditorForm)
       setProfileMessage('Profile updated successfully.')
     } catch (error) {
       setProfileMessage(error.message)
@@ -536,7 +616,6 @@ function App() {
         headers: {},
       })
       setCurrentUser(updated)
-      setProfileForm((prev) => ({ ...prev, profile_photo: updated.profile_photo ?? '' }))
       setProfilePhotoFile(null)
       setProfileMessage('Profile photo uploaded successfully.')
     } catch (error) {
@@ -568,10 +647,12 @@ function App() {
           restaurant_id: activeRestaurantId,
           rating: Number(reviewForm.rating),
           comment: reviewForm.comment,
+          photo_url: reviewForm.photo_url || null,
         }),
         headers: {},
       })
       setReviewForm({ rating: 5, comment: '' })
+      setReviewPhotoFile(null)
       setReviewMessage('Review added successfully.')
       await loadReviews(activeRestaurantId)
       await loadMyReviewHistory()
@@ -579,6 +660,28 @@ function App() {
       setReviewMessage(error.message)
     } finally {
       setReviewSaving(false)
+    }
+  }
+
+  const uploadReviewPhoto = async () => {
+    setReviewMessage('')
+    if (!token) { setReviewMessage('Please login to upload a photo.'); return }
+    if (!reviewPhotoFile) { setReviewMessage('Please choose an image file first.'); return }
+    setReviewPhotoUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('photo', reviewPhotoFile)
+      const uploaded = await apiRequest('/reviews/uploads/photo', {
+        method: 'POST',
+        body: formData,
+        headers: {},
+      })
+      setReviewForm((prev) => ({ ...prev, photo_url: uploaded.photo_url ?? '' }))
+      setReviewMessage('Photo uploaded. Now click Post Review.')
+    } catch (error) {
+      setReviewMessage(error.message)
+    } finally {
+      setReviewPhotoUploading(false)
     }
   }
 
@@ -629,6 +732,47 @@ function App() {
     }
   }
 
+  const updateMyReviewHistoryItem = async (reviewId, payload) => {
+    setReviewMessage('')
+    setReviewSaving(true)
+    try {
+      await apiRequest(`/reviews/${reviewId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          rating: Number(payload.rating),
+          comment: payload.comment,
+        }),
+        headers: {},
+      })
+      setReviewMessage('Review updated successfully.')
+      await loadMyReviewHistory()
+      if (activeRestaurantId) {
+        await loadReviews(activeRestaurantId)
+      }
+    } catch (error) {
+      setReviewMessage(error.message)
+    } finally {
+      setReviewSaving(false)
+    }
+  }
+
+  const deleteMyReviewHistoryItem = async (reviewId) => {
+    setReviewMessage('')
+    setReviewSaving(true)
+    try {
+      await apiRequest(`/reviews/${reviewId}`, { method: 'DELETE' })
+      setReviewMessage('Review deleted successfully.')
+      await loadMyReviewHistory()
+      if (activeRestaurantId) {
+        await loadReviews(activeRestaurantId)
+      }
+    } catch (error) {
+      setReviewMessage(error.message)
+    } finally {
+      setReviewSaving(false)
+    }
+  }
+
   const savePreferences = async (event) => {
     event.preventDefault()
     setPreferencesMessage('')
@@ -646,22 +790,35 @@ function App() {
       return
     }
 
+    const payload = {}
+    const setIfProvided = (key, value) => {
+      const trimmed = String(value ?? '').trim()
+      if (trimmed) payload[key] = trimmed
+    }
+
+    setIfProvided('cuisines', preferencesForm.cuisines)
+    if (preferencesForm.price_min) payload.price_min = Number(preferencesForm.price_min)
+    if (preferencesForm.price_max) payload.price_max = Number(preferencesForm.price_max)
+    setIfProvided('preferred_locations', preferencesForm.preferred_locations)
+    if (preferencesForm.search_radius) payload.search_radius = Number(preferencesForm.search_radius)
+    setIfProvided('dietary_needs', preferencesForm.dietary_needs)
+    setIfProvided('ambiance', preferencesForm.ambiance)
+    setIfProvided('sort_preference', preferencesForm.sort_preference)
+
+    if (Object.keys(payload).length === 0) {
+      setPreferencesMessage('Enter at least one preference field to update.')
+      return
+    }
+
     setPreferencesSaving(true)
     try {
-      await apiRequest('/preferences/me', {
+      const updated = await apiRequest('/preferences/me', {
         method: 'PUT',
-        body: JSON.stringify({
-          cuisines: preferencesForm.cuisines || null,
-          price_min: preferencesForm.price_min ? Number(preferencesForm.price_min) : null,
-          price_max: preferencesForm.price_max ? Number(preferencesForm.price_max) : null,
-          preferred_locations: preferencesForm.preferred_locations || null,
-          search_radius: preferencesForm.search_radius ? Number(preferencesForm.search_radius) : null,
-          dietary_needs: preferencesForm.dietary_needs || null,
-          ambiance: preferencesForm.ambiance || null,
-          sort_preference: preferencesForm.sort_preference || null,
-        }),
+        body: JSON.stringify(payload),
         headers: {},
       })
+      setCurrentPreferences(updated)
+      setPreferencesForm(emptyPreferencesEditorForm)
       setPreferencesMessage('Preferences saved successfully.')
     } catch (error) {
       setPreferencesMessage(error.message)
@@ -696,8 +853,11 @@ function App() {
         city: listingForm.city,
         state: listingForm.state || null,
         zip: listingForm.zip || null,
+        phone: listingForm.phone || null,
+        hours: listingForm.hours || null,
         description: listingForm.description || null,
         price_tier: listingForm.price_tier ? Number(listingForm.price_tier) : null,
+        photo_url: listingForm.photo_url || null,
       }
 
       await apiRequest('/restaurants', {
@@ -713,9 +873,13 @@ function App() {
         city: '',
         state: '',
         zip: '',
+        phone: '',
+        hours: '',
         description: '',
         price_tier: '',
+        photo_url: '',
       })
+      setListingPhotoFile(null)
       setListingMessage('Restaurant listed successfully.')
       await loadRestaurants()
       await loadMyListings()
@@ -723,6 +887,37 @@ function App() {
       setListingMessage(error.message)
     } finally {
       setListingSaving(false)
+    }
+  }
+
+  const uploadListingPhoto = async () => {
+    setListingMessage('')
+    if (!token) {
+      setListingMessage('Please login to upload a listing photo.')
+      return
+    }
+    if (!listingPhotoFile) {
+      setListingMessage('Please choose an image file first.')
+      return
+    }
+
+    setListingPhotoUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('photo', listingPhotoFile)
+
+      const uploaded = await apiRequest('/restaurants/uploads/photo', {
+        method: 'POST',
+        body: formData,
+        headers: {},
+      })
+
+      setListingForm((prev) => ({ ...prev, photo_url: uploaded.photo_url ?? '' }))
+      setListingMessage('Restaurant photo uploaded. Now click Create Listing.')
+    } catch (error) {
+      setListingMessage(error.message)
+    } finally {
+      setListingPhotoUploading(false)
     }
   }
 
@@ -788,6 +983,7 @@ function App() {
     setCurrentUser(null)
     setMyReviewHistory([])
     setAuthMessage('Logged out.')
+    navigate('/login')
   }
 
   const onOwnerAuthSubmit = async (event) => {
@@ -802,6 +998,16 @@ function App() {
           headers: {},
           authToken: '',
         })
+
+        setOwnerMessage('Owner account created successfully. Please login now.')
+        setOwnerForm((prev) => ({
+          ...prev,
+          name: '',
+          restaurant_location: '',
+          password: '',
+        }))
+        navigate('/owner/login')
+        return
       }
 
       const loginData = await apiRequest('/auth/owners/login', {
@@ -815,7 +1021,12 @@ function App() {
       })
 
       setOwnerToken(loginData.access_token)
-      setOwnerMessage('Owner authenticated successfully.')
+      // Clear user session — only one role can be active at a time
+      setToken('')
+      setCurrentUser(null)
+      setMyReviewHistory([])
+      setOwnerMessage('Owner logged in successfully.')
+      navigate('/owner/profile')
     } catch (error) {
       setOwnerMessage(error.message)
     } finally {
@@ -833,6 +1044,10 @@ function App() {
       setOwnerMessage('Please enter a valid restaurant ID.')
       return
     }
+    if (ownerClaimedRestaurantIds.has(restaurantId)) {
+      setOwnerMessage('You already claimed this restaurant.')
+      return
+    }
     try {
       await apiRequest(`/owners/restaurants/${restaurantId}/claim`, {
         method: 'POST',
@@ -841,7 +1056,7 @@ function App() {
       })
       setOwnerMessage('Restaurant claimed successfully.')
       setOwnerClaimRestaurantId('')
-      await loadOwnerData()
+      await Promise.all([loadOwnerData(), loadRestaurants(), loadGloballyClaimedIds()])
     } catch (error) {
       setOwnerMessage(error.message)
     }
@@ -854,7 +1069,115 @@ function App() {
     setOwnerDashboard(null)
     setSelectedOwnerRestaurantId('')
     setOwnerRestaurantReviews([])
+    setOwnerNewRestaurantPhotoFile(null)
+    setOwnerEditRestaurantPhotoFile(null)
     setOwnerMessage('Owner logged out.')
+    navigate('/owner/login')
+  }
+
+  const uploadOwnerRestaurantPhoto = async (targetForm) => {
+    setOwnerMessage('')
+    if (!ownerToken) {
+      setOwnerMessage('Owner login required to upload photos.')
+      return
+    }
+
+    const file = targetForm === 'new' ? ownerNewRestaurantPhotoFile : ownerEditRestaurantPhotoFile
+    if (!file) {
+      setOwnerMessage('Please select an image file first.')
+      return
+    }
+
+    setOwnerRestaurantPhotoUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('photo', file)
+      const result = await apiRequest('/owners/uploads/photo', {
+        method: 'POST',
+        body: formData,
+        authToken: ownerToken,
+        headers: {},
+      })
+
+      if (targetForm === 'new') {
+        setOwnerNewRestaurantForm((prev) => ({ ...prev, photo_url: result.photo_url }))
+        setOwnerNewRestaurantPhotoFile(null)
+      } else {
+        setOwnerRestaurantForm((prev) => ({ ...prev, photo_url: result.photo_url }))
+        setOwnerEditRestaurantPhotoFile(null)
+      }
+      setOwnerMessage('Owner restaurant photo uploaded successfully.')
+    } catch (error) {
+      setOwnerMessage(error.message)
+    } finally {
+      setOwnerRestaurantPhotoUploading(false)
+    }
+  }
+
+  const submitOwnerRestaurant = async (event) => {
+    event.preventDefault()
+    setOwnerMessage('')
+
+    if (!ownerToken) {
+      setOwnerMessage('Owner login required to post restaurants.')
+      return
+    }
+
+    if (!ownerNewRestaurantForm.name || !ownerNewRestaurantForm.cuisine_type || !ownerNewRestaurantForm.address || !ownerNewRestaurantForm.city) {
+      setOwnerMessage('Name, cuisine, address, and city are required for posting.')
+      return
+    }
+
+    setOwnerNewRestaurantSaving(true)
+    try {
+      const payload = {
+        name: ownerNewRestaurantForm.name,
+        cuisine_type: ownerNewRestaurantForm.cuisine_type,
+        address: ownerNewRestaurantForm.address,
+        city: ownerNewRestaurantForm.city,
+        state: ownerNewRestaurantForm.state || null,
+        zip: ownerNewRestaurantForm.zip || null,
+        country: ownerNewRestaurantForm.country || null,
+        description: ownerNewRestaurantForm.description || null,
+        phone: ownerNewRestaurantForm.phone || null,
+        price_tier: ownerNewRestaurantForm.price_tier ? Number(ownerNewRestaurantForm.price_tier) : null,
+        hours: ownerNewRestaurantForm.hours || null,
+        amenities: ownerNewRestaurantForm.amenities || null,
+        photo_url: ownerNewRestaurantForm.photo_url || null,
+      }
+
+      const created = await apiRequest('/owners/restaurants', {
+        method: 'POST',
+        authToken: ownerToken,
+        headers: {},
+        body: JSON.stringify(payload),
+      })
+
+      setOwnerNewRestaurantForm({
+        name: '',
+        cuisine_type: '',
+        address: '',
+        city: '',
+        state: '',
+        zip: '',
+        country: '',
+        description: '',
+        phone: '',
+        price_tier: '',
+        hours: '',
+        amenities: '',
+        photo_url: '',
+      })
+      setOwnerNewRestaurantPhotoFile(null)
+      setSelectedOwnerRestaurantId(String(created.id))
+      setOwnerMessage('Restaurant posted and claimed successfully.')
+
+      await Promise.all([loadOwnerData(), loadRestaurants(), loadGloballyClaimedIds()])
+    } catch (error) {
+      setOwnerMessage(error.message)
+    } finally {
+      setOwnerNewRestaurantSaving(false)
+    }
   }
 
   const saveOwnerRestaurantDetails = async (event) => {
@@ -886,6 +1209,7 @@ function App() {
         price_tier: ownerRestaurantForm.price_tier ? Number(ownerRestaurantForm.price_tier) : null,
         hours: ownerRestaurantForm.hours || null,
         amenities: ownerRestaurantForm.amenities || null,
+        photo_url: ownerRestaurantForm.photo_url || null,
       }
       await apiRequest(`/owners/restaurants/${selectedOwnerRestaurantId}`, {
         method: 'PUT',
@@ -893,8 +1217,11 @@ function App() {
         headers: {},
         body: JSON.stringify(payload),
       })
-      await loadOwnerData()
-      await loadOwnerRestaurantDetails()
+      await Promise.all([
+        loadOwnerData(),
+        loadOwnerRestaurantDetails(),
+        loadRestaurants(),
+      ])
       setOwnerMessage('Claimed restaurant updated successfully.')
     } catch (error) {
       setOwnerMessage(error.message)
@@ -933,8 +1260,7 @@ function App() {
     }
   }
 
-  const submitAiMessage = async (event) => {
-    event.preventDefault()
+  const sendAiPrompt = async (promptText) => {
     setAiMessage('')
 
     if (!token) {
@@ -942,7 +1268,7 @@ function App() {
       return
     }
 
-    const trimmed = aiInput.trim()
+    const trimmed = String(promptText ?? '').trim()
     if (!trimmed) {
       setAiMessage('Please enter a message for the assistant.')
       return
@@ -967,6 +1293,7 @@ function App() {
       ])
       setAiRecommendations(response.recommendations ?? [])
       setAiFilters(response.extracted_filters ?? null)
+      setAiWebContext(response.web_context ?? [])
       setAiInput('')
     } catch (error) {
       setAiMessage(error.message)
@@ -975,10 +1302,21 @@ function App() {
     }
   }
 
+  const submitAiMessage = async (event) => {
+    event.preventDefault()
+    await sendAiPrompt(aiInput)
+  }
+
+  const askAiQuickPrompt = async (prompt) => {
+    setAiInput(prompt)
+    await sendAiPrompt(prompt)
+  }
+
   const clearAiConversation = () => {
     setAiConversation([])
     setAiRecommendations([])
     setAiFilters(null)
+    setAiWebContext([])
     setAiMessage('Conversation cleared.')
   }
 
@@ -995,752 +1333,626 @@ function App() {
     default: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1400&q=80',
   }
 
+  const customLogoFile = 'Screenshot 2026-03-20 at 6.24.20 PM.png'
+  const customLogoPath = `/custom-images/${encodeURIComponent(customLogoFile)}`
+
+  const customHeroImageFiles = [
+    'Screenshot 2026-03-20 at 6.30.18 PM.png',
+    'Screenshot 2026-03-20 at 6.30.32 PM.png',
+    'Screenshot 2026-03-20 at 6.28.53 PM.png',
+    'Screenshot 2026-03-20 at 6.29.12 PM.png',
+    'Screenshot 2026-03-20 at 6.29.02 PM.png',
+  ]
+
+  const customCardImageFiles = [
+    'Screenshot 2026-03-20 at 6.28.53 PM.png',
+    'Screenshot 2026-03-20 at 6.29.02 PM.png',
+    'Screenshot 2026-03-20 at 6.29.12 PM.png',
+    'Screenshot 2026-03-20 at 6.30.18 PM.png',
+    'Screenshot 2026-03-20 at 6.30.32 PM.png',
+  ]
+
+  const customHeroImages = customHeroImageFiles
+    .map((fileName) => `/custom-images/${encodeURIComponent(fileName)}`)
+
+  const customCardImages = customCardImageFiles
+    .map((fileName) => `/custom-images/${encodeURIComponent(fileName)}`)
+
+  const stableImageIndex = (restaurant, imagesLength) => {
+    if (imagesLength === 0) return 0
+    const idComponent = Number(restaurant?.id ?? 0) * 31
+    const nameComponent = String(restaurant?.name ?? '')
+      .split('')
+      .reduce((accumulator, character) => accumulator + character.charCodeAt(0), 0)
+    return Math.abs(idComponent + nameComponent) % imagesLength
+  }
+
   const getRestaurantImage = (restaurant) => {
+    const restaurantPhoto = String(restaurant?.photo_url ?? '').trim()
+    if (restaurantPhoto) {
+      if (restaurantPhoto.startsWith('http://') || restaurantPhoto.startsWith('https://')) {
+        return restaurantPhoto
+      }
+      if (restaurantPhoto.startsWith('/')) {
+        return `${apiBaseUrl}${restaurantPhoto}`
+      }
+      return `${apiBaseUrl}/${restaurantPhoto}`
+    }
+
+    if (customCardImages.length > 0) {
+      return customCardImages[stableImageIndex(restaurant, customCardImages.length)]
+    }
     const key = String(restaurant?.cuisine_type ?? '').trim().toLowerCase()
     return cuisineCovers[key] ?? cuisineCovers.default
   }
 
+  const quickCategories = [
+    { label: 'Explore', path: '/' },
+    { label: 'Profile + Preferences', path: '/profile' },
+    { label: 'Add Restaurant', path: '/add-restaurant' },
+    { label: 'Write Review', path: '/write-review' },
+    { label: '❤️ Favourites', path: '/favourites' },
+    { label: '📋 History', path: '/history' },
+  ]
+  const heroRestaurants = restaurants.slice(0, 5)
+  const featuredRestaurant = activeRestaurant ?? restaurants[0] ?? favoriteRestaurants[0] ?? myListings[0] ?? null
+  const heroTiles = customHeroImages.length > 0
+    ? customHeroImages.map((imageSource, index) => ({
+      imageSource,
+      linkedRestaurantId: heroRestaurants[index]?.id ?? null,
+    }))
+    : (heroRestaurants.length > 0 ? heroRestaurants : [featuredRestaurant])
+      .filter(Boolean)
+      .map((restaurant) => ({
+        imageSource: getRestaurantImage(restaurant),
+        linkedRestaurantId: restaurant.id ?? null,
+      }))
+
+  // ── Hero slideshow ────────────────────────────────────────────────────────
+  const [heroSlideIndex, setHeroSlideIndex] = useState(0)
+  useEffect(() => {
+    if (heroTiles.length < 2) return
+    const timer = setInterval(() => {
+      setHeroSlideIndex((prev) => (prev + 1) % heroTiles.length)
+    }, 4000)
+    return () => clearInterval(timer)
+  }, [heroTiles.length])
+
+  const currentPath = location.pathname
+  const restaurantDetailMatch = currentPath.match(/^\/restaurants\/(\d+)$/)
+  const routeRestaurantId = restaurantDetailMatch ? Number(restaurantDetailMatch[1]) : null
+  const isRestaurantsRoute = currentPath === '/' || currentPath === '/restaurants' || Boolean(restaurantDetailMatch)
+  const knownPaths = useMemo(() => new Set([
+    '/',
+    '/restaurants',
+    '/login',
+    '/signup',
+    '/profile',
+    '/add-restaurant',
+    '/write-review',
+    '/favourites',
+    '/history',
+    '/owner/login',
+    '/owner/signup',
+    '/owner/profile',
+    '/owner/manage-restaurant',
+    '/owner/claim',
+    '/owner/reviews',
+    '/owner/analytics',
+  ]), [])
+  const userProtectedPaths = useMemo(() => new Set([
+    '/profile',
+    '/add-restaurant',
+    '/write-review',
+    '/favourites',
+    '/history',
+  ]), [])
+  const ownerProtectedPaths = useMemo(() => new Set([
+    '/owner/profile',
+    '/owner/manage-restaurant',
+    '/owner/claim',
+    '/owner/reviews',
+    '/owner/analytics',
+  ]), [])
+
+  const openRestaurantDetails = useCallback((restaurantId) => {
+    if (!restaurantId) return
+    setActiveRestaurantId(restaurantId)
+    navigate(`/restaurants/${restaurantId}`)
+  }, [navigate])
+
+  useEffect(() => {
+    if (currentPath === '/owner/login' && ownerAuthMode !== 'login') setOwnerAuthMode('login')
+    if (currentPath === '/owner/signup' && ownerAuthMode !== 'signup') setOwnerAuthMode('signup')
+  }, [currentPath, ownerAuthMode])
+
+  useEffect(() => {
+    if (currentPath === '/owner') {
+      navigate('/owner/analytics', { replace: true })
+    }
+  }, [currentPath, navigate])
+
+  useEffect(() => {
+    if (currentPath === '/account') {
+      navigate('/login', { replace: true })
+    }
+    if (currentPath === '/preferences') {
+      navigate('/profile', { replace: true })
+    }
+    if (currentPath === '/listings') {
+      navigate('/add-restaurant', { replace: true })
+    }
+    if (currentPath === '/reviews') {
+      navigate('/write-review', { replace: true })
+    }
+  }, [currentPath, navigate])
+
+  useEffect(() => {
+    if (routeRestaurantId && routeRestaurantId !== activeRestaurantId) {
+      setActiveRestaurantId(routeRestaurantId)
+    }
+  }, [routeRestaurantId, activeRestaurantId])
+
+  useEffect(() => {
+    if (userProtectedPaths.has(currentPath) && !token) {
+      setAuthMessage('Please login to access this page.')
+      navigate('/login', { replace: true })
+      return
+    }
+
+    if (ownerProtectedPaths.has(currentPath) && !ownerToken) {
+      setOwnerMessage('Owner login required to access this page.')
+      navigate('/owner/login', { replace: true })
+    }
+  }, [currentPath, token, ownerToken, navigate, userProtectedPaths, ownerProtectedPaths])
+
+  useEffect(() => {
+    if (routeRestaurantId || knownPaths.has(currentPath)) {
+      return
+    }
+    navigate('/', { replace: true })
+  }, [currentPath, routeRestaurantId, navigate, knownPaths])
+
+  const renderCurrentPage = () => {
+    const renderOwnerPage = (content) => (
+      <OwnerLayout ownerToken={ownerToken} currentOwner={currentOwner} currentPath={currentPath} navigate={navigate} ownerLogout={ownerLogout}>
+        {content}
+      </OwnerLayout>
+    )
+
+    if (routeRestaurantId) {
+      return (
+        <RestaurantDetailsPage
+          activeRestaurant={activeRestaurant}
+          reviews={reviews}
+          getRestaurantImage={getRestaurantImage}
+          apiBaseUrl={apiBaseUrl}
+        />
+      )
+    }
+
+    switch (currentPath) {
+      case '/':
+      case '/restaurants':
+        return (
+          <ExploreSearchPage
+            loadingRestaurants={loadingRestaurants}
+            loadRestaurants={loadRestaurants}
+            restaurantQuery={restaurantQuery}
+            setRestaurantQuery={setRestaurantQuery}
+            restaurants={restaurants}
+            restaurantsMessage={restaurantsMessage}
+            favoritesMessage={favoritesMessage}
+            favoriteRestaurantIds={favoriteRestaurantIds}
+            favoriteActionId={favoriteActionId}
+            toggleFavorite={toggleFavorite}
+            claimRestaurantForOwner={claimRestaurantForOwner}
+            ownerClaimedRestaurantIds={ownerClaimedRestaurantIds}
+            globallyClaimedRestaurantIds={globallyClaimedRestaurantIds}
+            ownerToken={ownerToken}
+            getRestaurantImage={getRestaurantImage}
+            openRestaurantDetails={openRestaurantDetails}
+          />
+        )
+      case '/login':
+        return (
+          <UserLoginPage
+            authForm={authForm}
+            setAuthForm={setAuthForm}
+            onAuthSubmit={onUserLoginSubmit}
+            authLoading={authLoading}
+            authMessage={authMessage}
+            token={token}
+            logout={logout}
+            currentUser={currentUser}
+            currentOwner={currentOwner}
+            ownerLogout={ownerLogout}
+          />
+        )
+      case '/signup':
+        return (
+          <UserSignupPage
+            authForm={authForm}
+            setAuthForm={setAuthForm}
+            onAuthSubmit={onUserSignupSubmit}
+            authLoading={authLoading}
+            authMessage={authMessage}
+            currentUser={currentUser}
+          />
+        )
+      case '/profile':
+        return (
+          <ProfilePreferencesPage
+            token={token}
+            currentUser={currentUser}
+            currentPreferences={currentPreferences}
+            profileForm={profileForm}
+            setProfileForm={setProfileForm}
+            countryOptions={countryOptions}
+            profilePhotoUploading={profilePhotoUploading}
+            setProfilePhotoFile={setProfilePhotoFile}
+            uploadProfilePhoto={uploadProfilePhoto}
+            profilePhotoFile={profilePhotoFile}
+            apiBaseUrl={apiBaseUrl}
+            saveProfile={saveProfile}
+            profileSaving={profileSaving}
+            profileMessage={profileMessage}
+            preferencesForm={preferencesForm}
+            setPreferencesForm={setPreferencesForm}
+            savePreferences={savePreferences}
+            preferencesSaving={preferencesSaving}
+            loadPreferences={loadPreferences}
+            preferencesMessage={preferencesMessage}
+          />
+        )
+      case '/add-restaurant':
+        return (
+          <AddRestaurantPage
+            submitListing={submitListing}
+            listingForm={listingForm}
+            setListingForm={setListingForm}
+            listingSaving={listingSaving}
+            listingMessage={listingMessage}
+            token={token}
+            myListings={myListings}
+            editingListingId={editingListingId}
+            editingListingForm={editingListingForm}
+            setEditingListingForm={setEditingListingForm}
+            saveListingEdit={saveListingEdit}
+            listingActionId={listingActionId}
+            setEditingListingId={setEditingListingId}
+            startEditListing={startEditListing}
+            deleteListing={deleteListing}
+            getRestaurantImage={getRestaurantImage}
+            listingPhotoFile={listingPhotoFile}
+            setListingPhotoFile={setListingPhotoFile}
+            listingPhotoUploading={listingPhotoUploading}
+            uploadListingPhoto={uploadListingPhoto}
+          />
+        )
+      case '/write-review':
+        return (
+          <WriteReviewPage
+            restaurants={restaurants}
+            activeRestaurantId={activeRestaurantId}
+            setActiveRestaurantId={setActiveRestaurantId}
+            submitReview={submitReview}
+            reviewForm={reviewForm}
+            setReviewForm={setReviewForm}
+            reviewSaving={reviewSaving}
+            token={token}
+            reviewMessage={reviewMessage}
+            myReviewHistory={myReviewHistory}
+            updateMyReviewHistoryItem={updateMyReviewHistoryItem}
+            deleteMyReviewHistoryItem={deleteMyReviewHistoryItem}
+            reviewPhotoFile={reviewPhotoFile}
+            setReviewPhotoFile={setReviewPhotoFile}
+            reviewPhotoUploading={reviewPhotoUploading}
+            uploadReviewPhoto={uploadReviewPhoto}
+            apiBaseUrl={apiBaseUrl}
+          />
+        )
+      case '/favourites':
+        return (
+          <FavouritesPage
+            token={token}
+            favoriteRestaurants={favoriteRestaurants}
+            favoriteRestaurantIds={favoriteRestaurantIds}
+            favoriteActionId={favoriteActionId}
+            toggleFavorite={toggleFavorite}
+            favoritesMessage={favoritesMessage}
+            getRestaurantImage={getRestaurantImage}
+            openRestaurantDetails={openRestaurantDetails}
+            navigate={navigate}
+          />
+        )
+      case '/history':
+        return (
+          <UserHistoryPage
+            token={token}
+            myReviewHistory={myReviewHistory}
+            myListings={myListings}
+            reviewMessage={reviewMessage}
+            reviewSaving={reviewSaving}
+            updateMyReviewHistoryItem={updateMyReviewHistoryItem}
+            deleteMyReviewHistoryItem={deleteMyReviewHistoryItem}
+            openRestaurantDetails={openRestaurantDetails}
+            navigate={navigate}
+          />
+        )
+      case '/owner/login':
+        return renderOwnerPage(
+          <OwnerLoginPage
+            ownerForm={ownerForm}
+            setOwnerForm={setOwnerForm}
+            onOwnerAuthSubmit={onOwnerAuthSubmit}
+            ownerAuthLoading={ownerAuthLoading}
+            ownerMessage={ownerMessage}
+            currentOwner={currentOwner}
+            currentUser={currentUser}
+            logout={logout}
+          />
+        )
+      case '/owner/signup':
+        return renderOwnerPage(
+          <OwnerSignupPage
+            ownerForm={ownerForm}
+            setOwnerForm={setOwnerForm}
+            onOwnerAuthSubmit={onOwnerAuthSubmit}
+            ownerAuthLoading={ownerAuthLoading}
+            ownerMessage={ownerMessage}
+            currentOwner={currentOwner}
+            currentUser={currentUser}
+            logout={logout}
+          />
+        )
+      case '/owner/profile':
+        return renderOwnerPage(
+          <OwnerProfilePage
+            ownerToken={ownerToken}
+            ownerRestaurants={ownerRestaurants}
+            selectedOwnerRestaurantId={selectedOwnerRestaurantId}
+            setSelectedOwnerRestaurantId={setSelectedOwnerRestaurantId}
+            ownerRestaurantForm={ownerRestaurantForm}
+            setOwnerRestaurantForm={setOwnerRestaurantForm}
+            saveOwnerRestaurantDetails={saveOwnerRestaurantDetails}
+            ownerRestaurantSaving={ownerRestaurantSaving}
+            ownerEditRestaurantPhotoFile={ownerEditRestaurantPhotoFile}
+            setOwnerEditRestaurantPhotoFile={setOwnerEditRestaurantPhotoFile}
+            uploadOwnerRestaurantPhoto={uploadOwnerRestaurantPhoto}
+            ownerRestaurantPhotoUploading={ownerRestaurantPhotoUploading}
+            ownerMessage={ownerMessage}
+            currentOwner={currentOwner}
+          />
+        )
+      case '/owner/manage-restaurant':
+        return renderOwnerPage(
+          <OwnerManageRestaurantPage
+            ownerToken={ownerToken}
+            ownerNewRestaurantForm={ownerNewRestaurantForm}
+            setOwnerNewRestaurantForm={setOwnerNewRestaurantForm}
+            postOwnerNewRestaurant={submitOwnerRestaurant}
+            ownerNewRestaurantSaving={ownerNewRestaurantSaving}
+            ownerNewRestaurantPhotoFile={ownerNewRestaurantPhotoFile}
+            setOwnerNewRestaurantPhotoFile={setOwnerNewRestaurantPhotoFile}
+            uploadOwnerRestaurantPhoto={uploadOwnerRestaurantPhoto}
+            ownerRestaurantPhotoUploading={ownerRestaurantPhotoUploading}
+            ownerMessage={ownerMessage}
+          />
+        )
+      case '/owner/claim':
+        return renderOwnerPage(
+          <OwnerClaimPage
+            ownerToken={ownerToken}
+            ownerClaimRestaurantId={ownerClaimRestaurantId}
+            setOwnerClaimRestaurantId={setOwnerClaimRestaurantId}
+            claimRestaurantForOwner={claimRestaurantForOwner}
+            ownerMessage={ownerMessage}
+            restaurants={restaurants}
+            ownerClaimedRestaurantIds={ownerClaimedRestaurantIds}
+            globallyClaimedRestaurantIds={globallyClaimedRestaurantIds}
+          />
+        )
+      case '/owner/reviews':
+        return renderOwnerPage(
+          <OwnerReviewsDashboardPage
+            ownerToken={ownerToken}
+            ownerRestaurants={ownerRestaurants}
+            selectedOwnerRestaurantId={selectedOwnerRestaurantId}
+            setSelectedOwnerRestaurantId={setSelectedOwnerRestaurantId}
+            ownerRestaurantReviews={ownerRestaurantReviews}
+            apiBaseUrl={apiBaseUrl}
+          />
+        )
+      case '/owner/analytics':
+        return renderOwnerPage(
+          <OwnerAnalyticsPage
+            ownerToken={ownerToken}
+            ownerDashboard={ownerDashboard}
+            ownerRestaurants={ownerRestaurants}
+            getRestaurantImage={getRestaurantImage}
+            selectedOwnerRestaurantId={selectedOwnerRestaurantId}
+            setSelectedOwnerRestaurantId={setSelectedOwnerRestaurantId}
+            ownerRestaurantReviews={ownerRestaurantReviews}
+          />
+        )
+      default:
+        return null
+    }
+  }
+
   return (
     <div className="app-shell">
-      <header className="hero">
-        <div className="hero-brand">
-          <span className="brand-pill">Yelp Lab Experience</span>
-          <h1>Discover great places. Build great demos.</h1>
-          <p>Production-style UI for your Yelp prototype with user, owner, and AI flows.</p>
+      <header className="yelp-topbar">
+        <div className="yelp-logo">
+          <img src={customLogoPath} alt="Yelp style logo" />
         </div>
-        <div className="hero-meta">
-          <p className="pair-credit">Lab Pair 20: Viraat Chaudhary and Raniel Quesada.</p>
+        <div className="yelp-search-wrap">
+          <input
+            className="yelp-search-input"
+            value={restaurantQuery.keyword}
+            onChange={(event) => setRestaurantQuery((prev) => ({ ...prev, keyword: event.target.value }))}
+            placeholder="New American"
+            aria-label="Search restaurants by keyword"
+          />
+          <input
+            className="yelp-search-input"
+            value={restaurantQuery.city}
+            onChange={(event) => setRestaurantQuery((prev) => ({ ...prev, city: event.target.value }))}
+            placeholder="Alameda, CA"
+            aria-label="Search restaurants by city"
+          />
+          <button
+            className="yelp-search-btn"
+            onClick={() => {
+              navigate('/restaurants')
+              loadRestaurants()
+            }}
+            disabled={loadingRestaurants}
+          >
+            {loadingRestaurants ? '...' : '⌕'}
+          </button>
+        </div>
+        <div className="topbar-links">
+          {currentOwner ? (
+            <>
+              <span className="topbar-user-indicator">Owner: {currentOwner.name}</span>
+              <button className="ghost-small" onClick={() => navigate('/owner/analytics')}>Owner Portal</button>
+              <button className="solid-small" onClick={ownerLogout}>Owner Logout</button>
+            </>
+          ) : currentUser ? (
+            <>
+              <span className="topbar-user-indicator">Logged in as {currentUser.name}</span>
+              <button className="ghost-small" onClick={() => navigate('/profile')}>My Profile</button>
+              <button className="ghost-small" onClick={() => navigate('/owner/login')}>Owner Portal</button>
+              <button className="solid-small" onClick={logout}>Logout</button>
+            </>
+          ) : (
+            <>
+              <button className="ghost-small" onClick={() => navigate('/login')}>Log In</button>
+              <button className="solid-small" onClick={() => navigate('/signup')}>Sign Up</button>
+              <button className="ghost-small" onClick={() => navigate('/owner/login')}>Owner Portal</button>
+            </>
+          )}
         </div>
       </header>
 
-      <section className="panel panel-accent">
-        <h2>Control Center</h2>
-        <div className="row wrap">
-          <input
-            value={apiBaseUrl}
-            onChange={(event) => setApiBaseUrl(event.target.value)}
-            placeholder="http://127.0.0.1:8000"
-            aria-label="Backend API base URL"
-          />
-          <button onClick={loadRestaurants} disabled={loadingRestaurants}>
-            {loadingRestaurants ? 'Loading...' : 'Reload Restaurants'}
+      <nav className="category-nav">
+        {quickCategories.map((category) => (
+          <button
+            key={category.path}
+            className={`category-link ${currentPath === category.path || (category.path === '/restaurants' && isRestaurantsRoute) ? 'active' : ''}`}
+            type="button"
+            onClick={() => navigate(category.path)}
+          >
+            {category.label}
           </button>
-          <span className="status-chip">User: {currentUser ? 'Connected' : 'Guest'}</span>
-          <span className="status-chip">Owner: {currentOwner ? 'Connected' : 'Guest'}</span>
-        </div>
-      </section>
+        ))}
+      </nav>
 
-      <section className="panel">
-        <h2>User Profile</h2>
-        <form onSubmit={saveProfile} className="stack">
-          <div className="row wrap">
-            <input
-              placeholder="Name"
-              value={profileForm.name}
-              onChange={(event) => setProfileForm((prev) => ({ ...prev, name: event.target.value }))}
-              disabled={!token}
-            />
-            <input
-              placeholder="Email"
-              type="email"
-              value={profileForm.email}
-              onChange={(event) => setProfileForm((prev) => ({ ...prev, email: event.target.value }))}
-              disabled={!token}
-            />
-            <input
-              placeholder="Phone"
-              value={profileForm.phone}
-              onChange={(event) => setProfileForm((prev) => ({ ...prev, phone: event.target.value }))}
-              disabled={!token}
-            />
-            <input
-              placeholder="City"
-              value={profileForm.city}
-              onChange={(event) => setProfileForm((prev) => ({ ...prev, city: event.target.value }))}
-              disabled={!token}
-            />
-            <input
-              placeholder="State (2-letter)"
-              value={profileForm.state}
-              maxLength={2}
-              onChange={(event) => setProfileForm((prev) => ({ ...prev, state: event.target.value.toUpperCase() }))}
-              disabled={!token}
-            />
-            <select
-              value={profileForm.country}
-              onChange={(event) => setProfileForm((prev) => ({ ...prev, country: event.target.value }))}
-              disabled={!token}
-            >
-              <option value="">Country</option>
-              {countryOptions.map((country) => (
-                <option key={country} value={country}>{country}</option>
-              ))}
-            </select>
-            <input
-              placeholder="Languages"
-              value={profileForm.languages}
-              onChange={(event) => setProfileForm((prev) => ({ ...prev, languages: event.target.value }))}
-              disabled={!token}
-            />
-            <input
-              placeholder="Gender"
-              value={profileForm.gender}
-              onChange={(event) => setProfileForm((prev) => ({ ...prev, gender: event.target.value }))}
-              disabled={!token}
-            />
-            <input
-              placeholder="Profile photo URL"
-              value={profileForm.profile_photo}
-              onChange={(event) => setProfileForm((prev) => ({ ...prev, profile_photo: event.target.value }))}
-              disabled={!token}
-            />
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(event) => setProfilePhotoFile(event.target.files?.[0] ?? null)}
-              disabled={!token || profilePhotoUploading}
-            />
-            <button
-              type="button"
-              onClick={uploadProfilePhoto}
-              disabled={!token || profilePhotoUploading || !profilePhotoFile}
-            >
-              {profilePhotoUploading ? 'Uploading...' : 'Upload Photo'}
-            </button>
-          </div>
-          {profileForm.profile_photo && (
-            <img
-              src={profileForm.profile_photo.startsWith('http') ? profileForm.profile_photo : `${apiBaseUrl}${profileForm.profile_photo}`}
-              alt="User profile"
-              className="profile-photo-preview"
-            />
-          )}
-          <textarea
-            placeholder="About me"
-            value={profileForm.about_me}
-            onChange={(event) => setProfileForm((prev) => ({ ...prev, about_me: event.target.value }))}
-            disabled={!token}
+      <section className="hero-showcase">
+        {/* Crossfade slideshow — one layer per slide, only active one is visible */}
+        {heroTiles.map((tile, index) => (
+          <div
+            key={`slide-${index}`}
+            className={`hero-slide ${index === heroSlideIndex ? 'hero-slide--active' : ''}`}
+            style={{ backgroundImage: `url(${tile.imageSource})` }}
           />
-          <button type="submit" disabled={!token || profileSaving}>
-            {profileSaving ? 'Saving...' : 'Save Profile'}
-          </button>
-        </form>
-        {profileMessage && <p className="info">{profileMessage}</p>}
-      </section>
+        ))}
 
-      <section className="panel">
-        <h2>User Preferences</h2>
-        <form onSubmit={savePreferences} className="stack">
-          <div className="row wrap">
-            <input
-              placeholder="Preferred cuisines (comma-separated)"
-              value={preferencesForm.cuisines}
-              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, cuisines: event.target.value }))}
-            />
-            <input
-              placeholder="Price min (1-4)"
-              value={preferencesForm.price_min}
-              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, price_min: event.target.value }))}
-            />
-            <input
-              placeholder="Price max (1-4)"
-              value={preferencesForm.price_max}
-              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, price_max: event.target.value }))}
-            />
-            <input
-              placeholder="Preferred locations"
-              value={preferencesForm.preferred_locations}
-              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, preferred_locations: event.target.value }))}
-            />
-            <input
-              placeholder="Search radius"
-              value={preferencesForm.search_radius}
-              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, search_radius: event.target.value }))}
-            />
-            <input
-              placeholder="Dietary needs"
-              value={preferencesForm.dietary_needs}
-              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, dietary_needs: event.target.value }))}
-            />
-            <input
-              placeholder="Ambiance"
-              value={preferencesForm.ambiance}
-              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, ambiance: event.target.value }))}
-            />
-            <input
-              placeholder="Sort preference"
-              value={preferencesForm.sort_preference}
-              onChange={(event) => setPreferencesForm((prev) => ({ ...prev, sort_preference: event.target.value }))}
-            />
-          </div>
-          <div className="row wrap">
-            <button type="submit" disabled={preferencesSaving || !token}>
-              {preferencesSaving ? 'Saving...' : 'Save Preferences'}
-            </button>
-            <button type="button" onClick={loadPreferences} disabled={!token}>
-              Reload Preferences
-            </button>
-          </div>
-        </form>
-        {preferencesMessage && <p className="info">{preferencesMessage}</p>}
-      </section>
+        {/* Dark gradient overlay */}
+        <div className="hero-slide-overlay" />
 
-      <div className="two-col">
-        <section className="panel">
-          <h2>User Account</h2>
-          <div className="row">
-            <button className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>Login</button>
-            <button className={authMode === 'signup' ? 'active' : ''} onClick={() => setAuthMode('signup')}>Sign Up</button>
-            {token && <button onClick={logout}>Logout</button>}
-          </div>
-
-          <form onSubmit={onAuthSubmit} className="stack">
-            {authMode === 'signup' && (
-              <input
-                value={authForm.name}
-                onChange={(event) => setAuthForm((prev) => ({ ...prev, name: event.target.value }))}
-                placeholder="Full name"
-                required
-              />
-            )}
-            <input
-              value={authForm.email}
-              onChange={(event) => setAuthForm((prev) => ({ ...prev, email: event.target.value }))}
-              placeholder="Email"
-              type="email"
-              required
-            />
-            <input
-              value={authForm.password}
-              onChange={(event) => setAuthForm((prev) => ({ ...prev, password: event.target.value }))}
-              placeholder="Password"
-              type="password"
-              required
-            />
-            <button type="submit" disabled={authLoading}>
-              {authLoading
-                ? 'Please wait...'
-                : authMode === 'signup'
-                  ? 'Create Account + Login'
-                  : 'Login'}
-            </button>
-          </form>
-
-          {currentUser && <p className="success">Logged in as: {currentUser.name} ({currentUser.email})</p>}
-          {authMessage && <p className="info">{authMessage}</p>}
-        </section>
-
-        <section className="panel">
-          <h2>Owner Portal</h2>
-          <div className="row wrap">
-            <button className={ownerAuthMode === 'login' ? 'active' : ''} onClick={() => setOwnerAuthMode('login')}>Owner Login</button>
-            <button className={ownerAuthMode === 'signup' ? 'active' : ''} onClick={() => setOwnerAuthMode('signup')}>Owner Sign Up</button>
-            {ownerToken && <button onClick={ownerLogout}>Owner Logout</button>}
-            {ownerToken && <button onClick={loadOwnerData}>Refresh Dashboard</button>}
-          </div>
-
-          <form onSubmit={onOwnerAuthSubmit} className="stack">
-            {ownerAuthMode === 'signup' && (
-              <input
-                value={ownerForm.name}
-                onChange={(event) => setOwnerForm((prev) => ({ ...prev, name: event.target.value }))}
-                placeholder="Owner full name"
-                required
-              />
-            )}
-            {ownerAuthMode === 'signup' && (
-              <input
-                value={ownerForm.restaurant_location}
-                onChange={(event) => setOwnerForm((prev) => ({ ...prev, restaurant_location: event.target.value }))}
-                placeholder="Primary restaurant location"
-              />
-            )}
-            <input
-              value={ownerForm.email}
-              onChange={(event) => setOwnerForm((prev) => ({ ...prev, email: event.target.value }))}
-              placeholder="Owner email"
-              type="email"
-              required
-            />
-            <input
-              value={ownerForm.password}
-              onChange={(event) => setOwnerForm((prev) => ({ ...prev, password: event.target.value }))}
-              placeholder="Owner password"
-              type="password"
-              required
-            />
-            <button type="submit" disabled={ownerAuthLoading}>
-              {ownerAuthLoading
-                ? 'Please wait...'
-                : ownerAuthMode === 'signup'
-                  ? 'Create Owner + Login'
-                  : 'Owner Login'}
-            </button>
-          </form>
-
-          <div className="row wrap">
-            <input
-              value={ownerClaimRestaurantId}
-              onChange={(event) => setOwnerClaimRestaurantId(event.target.value)}
-              placeholder="Restaurant ID to claim"
-            />
-            <button onClick={() => claimRestaurantForOwner(Number(ownerClaimRestaurantId))} disabled={!ownerToken}>
-              Claim by ID
-            </button>
-          </div>
-
-          {currentOwner && <p className="success">Owner logged in as: {currentOwner.name}</p>}
-          {ownerMessage && <p className="info">{ownerMessage}</p>}
-
-          {ownerToken && (
-            <form onSubmit={saveOwnerProfile} className="stack">
-              <div className="row wrap">
-                <input
-                  value={ownerProfileForm.name}
-                  onChange={(event) => setOwnerProfileForm((prev) => ({ ...prev, name: event.target.value }))}
-                  placeholder="Owner name"
-                />
-                <input
-                  value={ownerProfileForm.email}
-                  onChange={(event) => setOwnerProfileForm((prev) => ({ ...prev, email: event.target.value }))}
-                  placeholder="Owner email"
-                  type="email"
-                />
-                <input
-                  value={ownerProfileForm.restaurant_location}
-                  onChange={(event) => setOwnerProfileForm((prev) => ({ ...prev, restaurant_location: event.target.value }))}
-                  placeholder="Restaurant location"
-                />
-                <button type="submit" disabled={ownerProfileSaving}>
-                  {ownerProfileSaving ? 'Saving...' : 'Save Owner Profile'}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {ownerDashboard && (
-            <div className="stats-grid">
-              <article className="metric-card">
-                <span>Claimed</span>
-                <strong>{ownerDashboard.claimed_restaurants}</strong>
-              </article>
-              <article className="metric-card">
-                <span>Total Reviews</span>
-                <strong>{ownerDashboard.total_reviews}</strong>
-              </article>
-              <article className="metric-card">
-                <span>Avg Rating</span>
-                <strong>{ownerDashboard.avg_rating ?? 'N/A'}</strong>
-              </article>
-            </div>
-          )}
-
-          {ownerToken && ownerRestaurants.length === 0 && (
-            <p className="info">No claimed restaurants yet. Claim one from the Restaurants section.</p>
-          )}
-
-          {ownerDashboard?.recent_reviews?.length > 0 && (
-            <div className="list">
-              {ownerDashboard.recent_reviews.map((item) => (
-                <article key={`owner-review-${item.review_id}`} className="card">
-                  <p><strong>{item.restaurant_name}</strong> • {item.rating}/5</p>
-                  <p>{item.comment || 'No comment'}</p>
-                </article>
-              ))}
-            </div>
-          )}
-
-          {ownerToken && ownerRestaurants.length > 0 && (
-            <div className="stack" style={{ marginTop: '0.75rem' }}>
-              <label>
-                Manage Claimed Restaurant
-                <select
-                  value={selectedOwnerRestaurantId}
-                  onChange={(event) => setSelectedOwnerRestaurantId(event.target.value)}
-                >
-                  {ownerRestaurants.map((restaurant) => (
-                    <option key={`owner-manage-${restaurant.id}`} value={restaurant.id}>
-                      {restaurant.name} ({restaurant.city})
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <form onSubmit={saveOwnerRestaurantDetails} className="stack">
-                <div className="row wrap">
-                  <input value={ownerRestaurantForm.name} placeholder="Restaurant name" onChange={(event) => setOwnerRestaurantForm((prev) => ({ ...prev, name: event.target.value }))} />
-                  <input value={ownerRestaurantForm.cuisine_type} placeholder="Cuisine type" onChange={(event) => setOwnerRestaurantForm((prev) => ({ ...prev, cuisine_type: event.target.value }))} />
-                  <input value={ownerRestaurantForm.address} placeholder="Address" onChange={(event) => setOwnerRestaurantForm((prev) => ({ ...prev, address: event.target.value }))} />
-                  <input value={ownerRestaurantForm.city} placeholder="City" onChange={(event) => setOwnerRestaurantForm((prev) => ({ ...prev, city: event.target.value }))} />
-                  <input value={ownerRestaurantForm.state} placeholder="State" onChange={(event) => setOwnerRestaurantForm((prev) => ({ ...prev, state: event.target.value }))} />
-                  <input value={ownerRestaurantForm.zip} placeholder="Zip" onChange={(event) => setOwnerRestaurantForm((prev) => ({ ...prev, zip: event.target.value }))} />
-                  <input value={ownerRestaurantForm.country} placeholder="Country" onChange={(event) => setOwnerRestaurantForm((prev) => ({ ...prev, country: event.target.value }))} />
-                  <input value={ownerRestaurantForm.phone} placeholder="Contact phone" onChange={(event) => setOwnerRestaurantForm((prev) => ({ ...prev, phone: event.target.value }))} />
-                  <input value={ownerRestaurantForm.price_tier} placeholder="Price tier (1-4)" onChange={(event) => setOwnerRestaurantForm((prev) => ({ ...prev, price_tier: event.target.value }))} />
-                </div>
-                <textarea value={ownerRestaurantForm.description} placeholder="Description" onChange={(event) => setOwnerRestaurantForm((prev) => ({ ...prev, description: event.target.value }))} />
-                <textarea value={ownerRestaurantForm.hours} placeholder="Hours of operation" onChange={(event) => setOwnerRestaurantForm((prev) => ({ ...prev, hours: event.target.value }))} />
-                <textarea value={ownerRestaurantForm.amenities} placeholder="Amenities" onChange={(event) => setOwnerRestaurantForm((prev) => ({ ...prev, amenities: event.target.value }))} />
-                <button type="submit" disabled={ownerRestaurantSaving}>
-                  {ownerRestaurantSaving ? 'Saving...' : 'Save Restaurant Details'}
-                </button>
-              </form>
-
-              <div className="list">
-                {ownerRestaurantReviews.map((review) => (
-                  <article key={`owner-readonly-${review.id}`} className="card">
-                    <p><strong>{review.user_name}</strong> • {review.rating}/5</p>
-                    <p>{review.comment || 'No comment'}</p>
-                    <p className="muted">{new Date(review.created_at).toLocaleString()}</p>
-                  </article>
-                ))}
-                {ownerRestaurantReviews.length === 0 && (
-                  <p className="info">No reviews yet for this claimed restaurant.</p>
+        <div className="hero-overlay-content">
+          {routeRestaurantId && activeRestaurant ? (
+            <>
+              <span className="brand-pill">
+                {activeRestaurant.cuisine_type || 'Restaurant'}
+                {activeRestaurant.city ? ` · ${activeRestaurant.city}` : ''}
+              </span>
+              <h1 className="hero-restaurant-name">{activeRestaurant.name}</h1>
+              <div className="hero-restaurant-meta">
+                {activeRestaurant.price_tier && (
+                  <span className="hero-meta-chip">{'$'.repeat(activeRestaurant.price_tier)}</span>
+                )}
+                {reviews.length > 0 && (
+                  <span className="hero-meta-chip">
+                    ★ {(reviews.reduce((s, r) => s + Number(r.rating || 0), 0) / reviews.length).toFixed(1)}
+                    <span className="hero-meta-sub"> ({reviews.length} review{reviews.length !== 1 ? 's' : ''})</span>
+                  </span>
+                )}
+                {activeRestaurant.address && (
+                  <span className="hero-meta-chip">{activeRestaurant.address}</span>
                 )}
               </div>
-            </div>
+            </>
+          ) : (
+            <>
+              <span className="brand-pill">Yelp Lab Experience</span>
+              <h1>Eat Well. Review Boldly. Discover More.</h1>
+              <p className="pair-credit">Lab Pair 20: Viraat Chaudhary and Raniel Quesada.</p>
+            </>
           )}
-        </section>
-      </div>
+        </div>
 
-      <section className="panel">
-        <h2>My Restaurant Listings</h2>
-        <form onSubmit={submitListing} className="stack">
-          <div className="row wrap">
-            <input
-              placeholder="Restaurant name"
-              value={listingForm.name}
-              onChange={(event) => setListingForm((prev) => ({ ...prev, name: event.target.value }))}
-              required
-            />
-            <input
-              placeholder="Cuisine"
-              value={listingForm.cuisine_type}
-              onChange={(event) => setListingForm((prev) => ({ ...prev, cuisine_type: event.target.value }))}
-              required
-            />
-            <input
-              placeholder="Address"
-              value={listingForm.address}
-              onChange={(event) => setListingForm((prev) => ({ ...prev, address: event.target.value }))}
-              required
-            />
-            <input
-              placeholder="City"
-              value={listingForm.city}
-              onChange={(event) => setListingForm((prev) => ({ ...prev, city: event.target.value }))}
-              required
-            />
-            <input
-              placeholder="State"
-              value={listingForm.state}
-              onChange={(event) => setListingForm((prev) => ({ ...prev, state: event.target.value }))}
-            />
-            <input
-              placeholder="Zip"
-              value={listingForm.zip}
-              onChange={(event) => setListingForm((prev) => ({ ...prev, zip: event.target.value }))}
-            />
-            <input
-              placeholder="Price tier (1-4)"
-              value={listingForm.price_tier}
-              onChange={(event) => setListingForm((prev) => ({ ...prev, price_tier: event.target.value }))}
-            />
+        {/* Dot indicators */}
+        {heroTiles.length > 1 && (
+          <div className="hero-dots">
+            {heroTiles.map((_, index) => (
+              <button
+                key={`dot-${index}`}
+                type="button"
+                className={`hero-dot ${index === heroSlideIndex ? 'hero-dot--active' : ''}`}
+                onClick={() => setHeroSlideIndex(index)}
+                aria-label={`Go to slide ${index + 1}`}
+              />
+            ))}
           </div>
-          <textarea
-            placeholder="Description"
-            value={listingForm.description}
-            onChange={(event) => setListingForm((prev) => ({ ...prev, description: event.target.value }))}
-          />
-          <button type="submit" disabled={listingSaving}>
-            {listingSaving ? 'Creating...' : 'Create Listing'}
-          </button>
-        </form>
-        {listingMessage && <p className="info">{listingMessage}</p>}
-
-        {token && myListings.length === 0 && (
-          <p className="info">You have no listings yet. Create your first restaurant above.</p>
         )}
+      </section>
 
-        <div className="restaurant-grid">
-          {myListings.map((listing) => (
-            <article key={`my-${listing.id}`} className="restaurant-card">
-              <div className="restaurant-card-cover" style={{ backgroundImage: `url(${getRestaurantImage(listing)})` }} />
-              <div className="restaurant-head">
-                <h3>{listing.name}</h3>
-                <span className="chip">{listing.cuisine_type}</span>
-              </div>
-              <p className="muted">{listing.city}</p>
+      {renderCurrentPage()}
 
-              {editingListingId === listing.id ? (
-                <div className="stack">
-                  <textarea
-                    value={editingListingForm.description}
-                    onChange={(event) => setEditingListingForm((prev) => ({ ...prev, description: event.target.value }))}
-                    placeholder="Edit description"
-                  />
-                  <input
-                    value={editingListingForm.price_tier}
-                    onChange={(event) => setEditingListingForm((prev) => ({ ...prev, price_tier: event.target.value }))}
-                    placeholder="Edit price tier"
-                  />
-                  <div className="row wrap">
-                    <button onClick={() => saveListingEdit(listing.id)} disabled={listingActionId === listing.id}>Save</button>
-                    <button onClick={() => setEditingListingId(null)} disabled={listingActionId === listing.id}>Cancel</button>
-                  </div>
+      {/* AI widget: only on user/public pages, never on owner workspace */}
+      {!currentPath.startsWith('/owner') && (
+        <div className="ai-widget-container">
+          {isAiWidgetOpen && (
+            <div className="ai-widget-shell">
+              <div className="ai-widget-header">
+                <div className="ai-widget-header-left">
+                  <span className="ai-widget-dot" />
+                  <strong>Dining Assistant</strong>
                 </div>
-              ) : (
-                <>
-                  {listing.description && <p>{listing.description}</p>}
-                  <p>Price Tier: {listing.price_tier ?? 'N/A'}</p>
-                  <div className="row wrap">
-                    <button onClick={() => startEditListing(listing)} disabled={listingActionId === listing.id}>Edit</button>
-                    <button onClick={() => deleteListing(listing.id)} disabled={listingActionId === listing.id}>Delete</button>
-                  </div>
-                </>
-              )}
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel">
-        <h2>My Review History</h2>
-        {token && myReviewHistory.length === 0 && <p className="info">No past reviews yet.</p>}
-        {!token && <p className="info">Login to view your review history.</p>}
-        <div className="list">
-          {myReviewHistory.map((item) => (
-            <article key={`history-${item.id}`} className="card">
-              <p><strong>{item.restaurant_name}</strong> ({item.restaurant_city || 'N/A'})</p>
-              <p>Rating: {item.rating}/5</p>
-              <p>{item.comment || 'No comment'}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel">
-        <h2>My Favorites</h2>
-        {token && favoriteRestaurants.length === 0 && <p className="info">No favorites yet.</p>}
-        {!token && <p className="info">Login to view your favorites.</p>}
-        <div className="restaurant-grid">
-          {favoriteRestaurants.map((restaurant) => (
-            <article key={`fav-${restaurant.id}`} className="restaurant-card">
-              <div className="restaurant-card-cover" style={{ backgroundImage: `url(${getRestaurantImage(restaurant)})` }} />
-              <div className="restaurant-head">
-                <h3>{restaurant.name}</h3>
-                <span className="chip">{restaurant.cuisine_type}</span>
+                <button type="button" className="ai-widget-close" onClick={() => setIsAiWidgetOpen(false)}>×</button>
               </div>
-              <p className="muted">{restaurant.city}</p>
-              <div className="row wrap">
-                <button onClick={() => setActiveRestaurantId(restaurant.id)}>Open Details</button>
-                <button onClick={() => toggleFavorite(restaurant.id)} disabled={favoriteActionId === restaurant.id}>Unfavorite</button>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel">
-        <h2>Restaurants</h2>
-        <div className="row wrap">
-          <input
-            placeholder="Keyword"
-            value={restaurantQuery.keyword}
-            onChange={(event) => setRestaurantQuery((prev) => ({ ...prev, keyword: event.target.value }))}
-          />
-          <input
-            placeholder="City"
-            value={restaurantQuery.city}
-            onChange={(event) => setRestaurantQuery((prev) => ({ ...prev, city: event.target.value }))}
-          />
-          <input
-            placeholder="Cuisine"
-            value={restaurantQuery.cuisine_type}
-            onChange={(event) => setRestaurantQuery((prev) => ({ ...prev, cuisine_type: event.target.value }))}
-          />
-          <button onClick={loadRestaurants} disabled={loadingRestaurants}>Search</button>
-        </div>
-
-        {loadingRestaurants && <p className="info">Loading restaurants...</p>}
-        {restaurantsMessage && <p className="info">{restaurantsMessage}</p>}
-        {favoritesMessage && <p className="info">{favoritesMessage}</p>}
-        {!loadingRestaurants && restaurants.length === 0 && <p className="info">No restaurants to display yet.</p>}
-
-        <div className="restaurant-grid">
-          {restaurants.map((restaurant) => (
-            <article key={restaurant.id} className="restaurant-card">
-              <div className="restaurant-card-cover" style={{ backgroundImage: `url(${getRestaurantImage(restaurant)})` }} />
-              <div className="restaurant-head">
-                <h3>{restaurant.name}</h3>
-                <span className="chip">{restaurant.cuisine_type}</span>
-              </div>
-              <p className="muted">{restaurant.city}</p>
-              {restaurant.description && <p>{restaurant.description}</p>}
-              <div className="row wrap">
-                <button onClick={() => setActiveRestaurantId(restaurant.id)}>View Reviews</button>
-                <button onClick={() => toggleFavorite(restaurant.id)} disabled={favoriteActionId === restaurant.id}>
-                  {favoriteRestaurantIds.has(restaurant.id) ? 'Unfavorite' : 'Favorite'}
-                </button>
-                <button onClick={() => claimRestaurantForOwner(restaurant.id)} disabled={!ownerToken}>Claim (Owner)</button>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <div className="two-col">
-        <section className="panel">
-          <h2>Reviews {activeRestaurant ? `for ${activeRestaurant.name}` : ''}</h2>
-          {activeRestaurant && (
-            <p className="info">Total Reviews: {reviews.length}</p>
-          )}
-          {activeRestaurant && reviews.length > 0 && (
-            <p className="info">
-              Average Rating: {(reviews.reduce((sum, item) => sum + Number(item.rating || 0), 0) / reviews.length).toFixed(1)}/5
-            </p>
-          )}
-          <form onSubmit={submitReview} className="stack">
-            <label>
-              Rating
-              <select
-                value={reviewForm.rating}
-                onChange={(event) => setReviewForm((prev) => ({ ...prev, rating: event.target.value }))}
-              >
-                {[1, 2, 3, 4, 5].map((rating) => (
-                  <option value={rating} key={rating}>{rating}</option>
-                ))}
-              </select>
-            </label>
-            <textarea
-              placeholder="Write your review"
-              value={reviewForm.comment}
-              onChange={(event) => setReviewForm((prev) => ({ ...prev, comment: event.target.value }))}
-            />
-            <button type="submit" disabled={reviewSaving || !token || !activeRestaurantId}>
-              {reviewSaving ? 'Posting...' : 'Post Review'}
-            </button>
-          </form>
-          {reviewMessage && <p className="info">{reviewMessage}</p>}
-
-          {activeRestaurant && reviews.length === 0 && (
-            <p className="info">No reviews yet. Be the first to review this place.</p>
-          )}
-
-          <div className="list">
-            {reviews.map((review) => (
-              <article key={review.id} className="card">
-                {editingReviewId === review.id ? (
-                  <div className="stack">
-                    <label>
-                      Rating
-                      <select
-                        value={editingReviewForm.rating}
-                        onChange={(event) => setEditingReviewForm((prev) => ({ ...prev, rating: event.target.value }))}
-                      >
-                        {[1, 2, 3, 4, 5].map((rating) => (
-                          <option value={rating} key={`edit-${rating}`}>{rating}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <textarea
-                      value={editingReviewForm.comment}
-                      onChange={(event) => setEditingReviewForm((prev) => ({ ...prev, comment: event.target.value }))}
-                    />
-                    <div className="row wrap">
-                      <button onClick={() => saveReviewEdit(review.id)} disabled={reviewSaving}>Save</button>
-                      <button onClick={() => setEditingReviewId(null)} disabled={reviewSaving}>Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <p><strong>{review.rating}/5</strong></p>
-                    <p>{review.comment || 'No comment'}</p>
-                    <p className="muted">Date: {new Date(review.created_at).toLocaleString()}</p>
-                    {currentUser?.id === review.user_id && (
-                      <div className="row wrap">
-                        <button onClick={() => startEditReview(review)} disabled={reviewSaving}>Edit</button>
-                        <button onClick={() => deleteReview(review.id)} disabled={reviewSaving}>Delete</button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="panel">
-          <h2>AI Assistant</h2>
-          <form onSubmit={submitAiMessage} className="stack">
-            <textarea
-              placeholder="Ask for recommendations (e.g., affordable Indian food in San Jose)"
-              value={aiInput}
-              onChange={(event) => setAiInput(event.target.value)}
-            />
-            <button type="submit" disabled={aiLoading}>
-              {aiLoading ? 'Thinking...' : 'Ask Assistant'}
-            </button>
-            <button type="button" onClick={clearAiConversation} disabled={aiLoading || aiConversation.length === 0}>
-              Clear Conversation
-            </button>
-          </form>
-
-          {aiMessage && <p className="info">{aiMessage}</p>}
-
-          {aiConversation.length === 0 && (
-            <p className="info">Start by asking for a cuisine, city, budget, or dietary preference.</p>
-          )}
-
-          {aiFilters && (
-            <div className="card">
-              <h3>Extracted Filters</h3>
-              <pre className="filters-block">{formattedFilters}</pre>
+              <AIAssistantPage
+                submitAiMessage={submitAiMessage}
+                aiInput={aiInput}
+                setAiInput={setAiInput}
+                quickPrompts={[
+                  'Find dinner tonight',
+                  'Best rated near me',
+                  'Vegan options',
+                ]}
+                onQuickPrompt={askAiQuickPrompt}
+                aiLoading={aiLoading}
+                clearAiConversation={clearAiConversation}
+                aiConversation={aiConversation}
+                aiMessage={aiMessage}
+                aiRecommendations={aiRecommendations}
+                getRestaurantImage={getRestaurantImage}
+                openRestaurantDetails={openRestaurantDetails}
+                token={token}
+                compact
+              />
             </div>
           )}
-
-          <div className="list">
-            {aiConversation.map((msg, index) => (
-              <article key={`${msg.role}-${index}`} className="card">
-                <p><strong>{msg.role === 'assistant' ? 'Assistant' : 'You'}:</strong> {msg.content}</p>
-              </article>
-            ))}
-          </div>
-
-          <div className="list">
-            {aiRecommendations.map((restaurant) => (
-              <article key={restaurant.id} className="restaurant-card ai-recommendation-card">
-                <div className="restaurant-card-cover" style={{ backgroundImage: `url(${getRestaurantImage(restaurant)})` }} />
-                <h3>{restaurant.name}</h3>
-                <p>{restaurant.cuisine_type} • {restaurant.city}</p>
-                <p>Price Tier: {restaurant.price_tier ?? 'N/A'} | Score: {restaurant.score}</p>
-                <p>Why: {restaurant.reason}</p>
-                <button onClick={() => setActiveRestaurantId(restaurant.id)}>Open Details</button>
-              </article>
-            ))}
-          </div>
-
-          {aiConversation.length > 0 && aiRecommendations.length === 0 && !aiLoading && (
-            <p className="info">No recommendation cards yet. Try adding more specific filters.</p>
+          {!isAiWidgetOpen && (
+            <button type="button" className="ai-widget-toggle" onClick={() => setIsAiWidgetOpen(true)}>
+              🍽️ Ask Assistant
+            </button>
           )}
-        </section>
-      </div>
-
-      {ownerRestaurants.length > 0 && (
-        <section className="panel">
-          <h2>Claimed Restaurants Snapshot</h2>
-          <div className="restaurant-grid">
-            {ownerRestaurants.map((restaurant) => (
-              <article key={`owner-${restaurant.id}`} className="restaurant-card">
-                <div className="restaurant-card-cover" style={{ backgroundImage: `url(${getRestaurantImage(restaurant)})` }} />
-                <h3>{restaurant.name}</h3>
-                <p className="muted">{restaurant.cuisine_type} • {restaurant.city}</p>
-                <p>Avg Rating: {restaurant.avg_rating ?? 'N/A'}</p>
-                <p>Review Count: {restaurant.review_count}</p>
-              </article>
-            ))}
-          </div>
-        </section>
+        </div>
       )}
 
       <footer className="site-footer">
