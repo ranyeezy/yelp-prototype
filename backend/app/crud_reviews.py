@@ -31,6 +31,7 @@ def create_review(db: Session, user_id: int, payload: schemas.ReviewCreate):
         restaurant_id=payload.restaurant_id,
         rating=payload.rating,
         comment=payload.comment,
+        photo_url=payload.photo_url,
     )
     db.add(review)
     db.commit()
@@ -46,12 +47,28 @@ def list_reviews_for_restaurant(db: Session, restaurant_id: int):
             detail="Restaurant not found",
         )
 
-    return (
-        db.query(models.Review)
+    rows = (
+        db.query(models.Review, models.User)
+        .join(models.User, models.Review.user_id == models.User.id)
         .filter(models.Review.restaurant_id == restaurant_id)
         .order_by(models.Review.created_at.desc())
         .all()
     )
+
+    return [
+        {
+            "id": review.id,
+            "user_id": review.user_id,
+            "user_name": user.name,
+            "restaurant_id": review.restaurant_id,
+            "rating": review.rating,
+            "comment": review.comment,
+            "photo_url": review.photo_url,
+            "created_at": review.created_at,
+            "updated_at": review.updated_at,
+        }
+        for review, user in rows
+    ]
 
 
 def get_review(db: Session, review_id: int):
@@ -81,8 +98,9 @@ def delete_review(db: Session, review: models.Review):
 
 def list_reviews_for_user(db: Session, user_id: int):
     rows = (
-        db.query(models.Review, models.Restaurant)
+        db.query(models.Review, models.Restaurant, models.User)
         .join(models.Restaurant, models.Review.restaurant_id == models.Restaurant.id)
+        .join(models.User, models.Review.user_id == models.User.id)
         .filter(models.Review.user_id == user_id)
         .order_by(models.Review.created_at.desc())
         .all()
@@ -91,13 +109,15 @@ def list_reviews_for_user(db: Session, user_id: int):
     return [
         {
             "id": review.id,
+            "user_name": user.name,
             "restaurant_id": restaurant.id,
             "restaurant_name": restaurant.name,
             "restaurant_city": restaurant.city,
             "rating": review.rating,
             "comment": review.comment,
+            "photo_url": review.photo_url,
             "created_at": review.created_at,
             "updated_at": review.updated_at,
         }
-        for review, restaurant in rows
+        for review, restaurant, user in rows
     ]

@@ -1,10 +1,18 @@
 from typing import Optional
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from . import models, schemas
 from .security import hash_password, verify_password
 
 #users
 def create_user(db: Session, payload: schemas.UserCreate) -> models.User:
+    existing = get_user_by_email(db, payload.email)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A user with this email already exists",
+        )
+
     user = models.User(
         name=payload.name,
         email=payload.email,
@@ -34,8 +42,19 @@ def update_user(db: Session, user: models.User, payload: schemas.UserUpdate) -> 
     db.refresh(user)
     return user
 
+
+def ensure_user_profile_defaults(db: Session, user: models.User) -> models.User:
+    return user
+
 #owner
 def create_owner(db: Session, payload: schemas.OwnerCreate) -> models.Owner:
+    existing = get_owner_by_email(db, payload.email)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An owner with this email already exists",
+        )
+
     owner = models.Owner(
         name=payload.name,
         email=payload.email,
