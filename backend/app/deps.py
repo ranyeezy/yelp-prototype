@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import jwt
+from jwt import InvalidTokenError
 from .database import SessionLocal
 from .security import JWT_SECRET, JWT_ALGORITHM
 from . import models
@@ -20,10 +21,16 @@ oauth2_user = OAuth2PasswordBearer(tokenUrl="/auth/users/login")
 oauth2_owner = OAuth2PasswordBearer(tokenUrl="/auth/owners/login")
 
 def _decode_token(token: str):    
-    return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except InvalidTokenError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token") from exc
 
 def get_current_user(token: str = Depends(oauth2_user), db: Session = Depends(get_db)):
     payload = _decode_token(token)
+    token_role = payload.get("role")
+    if token_role != "user":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user token")
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
@@ -34,6 +41,9 @@ def get_current_user(token: str = Depends(oauth2_user), db: Session = Depends(ge
 
 def get_current_owner(token: str = Depends(oauth2_owner), db: Session = Depends(get_db)):
     payload = _decode_token(token)
+    token_role = payload.get("role")
+    if token_role != "owner":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid owner token")
     owner_id = payload.get("sub")
     if not owner_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")

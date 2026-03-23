@@ -19,10 +19,11 @@ def hash_password(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
-def create_access_token(subject: str) -> str:
+def create_access_token(subject: str, role: str) -> str:
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": subject,
+        "role": role,
         "exp": expire
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
