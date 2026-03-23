@@ -66,6 +66,18 @@ class Restaurant(Base):
     reviews = relationship("Review", back_populates="restaurant", cascade="all, delete-orphan")
     favorites = relationship("Favorite", back_populates="restaurant", cascade="all, delete-orphan")
     owner_claims = relationship("OwnerRestaurant", back_populates="restaurant", cascade="all, delete-orphan")
+    photos = relationship("RestaurantPhoto", back_populates="restaurant", cascade="all, delete-orphan")
+
+
+class RestaurantPhoto(Base):
+    __tablename__ = "restaurant_photos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    restaurant_id: Mapped[int] = mapped_column(Integer, ForeignKey("restaurants.id", ondelete="CASCADE"), nullable=False, index=True)
+    photo_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    restaurant = relationship("Restaurant", back_populates="photos")
 
 #review table
 class Review(Base):
@@ -76,6 +88,7 @@ class Review(Base):
     restaurant_id: Mapped[int] = mapped_column(Integer, ForeignKey("restaurants.id", ondelete="CASCADE"), nullable=False, index=True)
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    photo_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     

@@ -23,7 +23,7 @@ class UserUpdate(BaseModel):
     phone: Optional[str] = Field(default=None)
     about_me: Optional[str] = Field(default=None)
     city: Optional[str] = Field(default=None)
-    state: Optional[str] = Field(default=None)
+    state: Optional[str] = Field(default=None, max_length=2)
     country: Optional[str] = Field(default=None)
     languages: Optional[str] = Field(default=None)
     gender: Optional[str] = Field(default=None)
@@ -52,7 +52,7 @@ class OwnerCreate(BaseModel):
     name: str = Field(min_length=1)
     email: EmailStr
     password: str = Field(min_length=1)
-    restaurant_location: Optional[str] = Field(default=None)
+    restaurant_location: str = Field(min_length=1)
 
 class OwnerLogin(BaseModel):
     email: EmailStr
@@ -106,7 +106,13 @@ class OwnerRecentReviewOut(BaseModel):
 class OwnerDashboardOut(BaseModel):
     claimed_restaurants: int
     total_reviews: int
+    total_views: int = 0
     avg_rating: Optional[float] = None
+    ratings_distribution: dict[str, int] = {}
+    positive_reviews: int = 0
+    neutral_reviews: int = 0
+    negative_reviews: int = 0
+    sentiment_summary: str = "Neutral"
     restaurants: list[OwnerRestaurantSummaryOut]
     recent_reviews: list[OwnerRecentReviewOut] = []
 
@@ -118,6 +124,7 @@ class OwnerRestaurantReviewOut(BaseModel):
     restaurant_id: int
     rating: int
     comment: Optional[str] = None
+    photo_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
         
@@ -161,6 +168,7 @@ class RestaurantCreate(BaseModel):
     price_tier: Optional[int] = None
     hours: Optional[str] = None
     amenities: Optional[str] = None
+    photo_url: Optional[str] = None
 
 class RestaurantUpdate(BaseModel):
     name: Optional[str] = None
@@ -175,6 +183,7 @@ class RestaurantUpdate(BaseModel):
     price_tier: Optional[int] = None
     hours: Optional[str] = None
     amenities: Optional[str] = None
+    photo_url: Optional[str] = None
 
 class RestaurantOut(BaseModel):
     id: int
@@ -190,6 +199,7 @@ class RestaurantOut(BaseModel):
     price_tier: Optional[int] = None
     hours: Optional[str] = None
     amenities: Optional[str] = None
+    photo_url: Optional[str] = None
     listed_by_user_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
@@ -198,24 +208,32 @@ class RestaurantOut(BaseModel):
         from_attributes = True
 
 
+class RestaurantPhotoUploadOut(BaseModel):
+    photo_url: str
+
+
 # review
 class ReviewCreate(BaseModel):
     restaurant_id: int
     rating: int = Field(ge=1, le=5)
     comment: Optional[str] = None
+    photo_url: Optional[str] = None
 
 
 class ReviewUpdate(BaseModel):
     rating: Optional[int] = Field(default=None, ge=1, le=5)
     comment: Optional[str] = None
+    photo_url: Optional[str] = None
 
 
 class ReviewOut(BaseModel):
     id: int
     user_id: int
+    user_name: Optional[str] = None
     restaurant_id: int
     rating: int
     comment: Optional[str] = None
+    photo_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -225,13 +243,19 @@ class ReviewOut(BaseModel):
 
 class UserReviewHistoryOut(BaseModel):
     id: int
+    user_name: Optional[str] = None
     restaurant_id: int
     restaurant_name: str
     restaurant_city: Optional[str] = None
     rating: int
     comment: Optional[str] = None
+    photo_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+
+class ReviewPhotoUploadOut(BaseModel):
+    photo_url: str
 
 
 # favorites
@@ -267,6 +291,7 @@ class RecommendedRestaurant(BaseModel):
     name: str
     cuisine_type: str
     city: str
+    rating: Optional[float] = None
     price_tier: Optional[int] = None
     score: float
     reason: str
