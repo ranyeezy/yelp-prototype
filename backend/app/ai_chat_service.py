@@ -272,13 +272,12 @@ def recommend_restaurants(
             })
 
     extracted = {
-        "cuisines": [],
-        "city": None,
-        "max_price_tier": None,
-        "dietary": [],
-        "ambiance": [],
-        "occasion": [],
-        "sort_by": "rating",
+        "cuisines": user_prefs.cuisines if user_prefs and user_prefs.cuisines else [],
+        "city": user_prefs.preferred_locations if user_prefs and user_prefs.preferred_locations else None,
+        "max_price_tier": user_prefs.price_max if user_prefs and user_prefs.price_max else None,
+        "dietary": user_prefs.dietary_needs if user_prefs and user_prefs.dietary_needs else [],
+        "ambiance": user_prefs.ambiance if user_prefs and user_prefs.ambiance else [],
+        "sort_by": user_prefs.sort_preference if user_prefs and user_prefs.sort_preference else "rating",
     }
 
     return extracted, ranked, clean_reply, []
