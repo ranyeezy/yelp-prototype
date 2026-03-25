@@ -22,5 +22,3 @@ venv/
 *.db
 *.sqlite3
 
-# Custom images (local assets, not committed)
-frontend/public/custom-images/
