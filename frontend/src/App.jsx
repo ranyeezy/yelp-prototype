@@ -47,7 +47,7 @@ const emptyPreferencesEditorForm = {
 function App() {
   const [apiBaseUrl] = useState('http://127.0.0.1:8000')
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' })
-  const [token, setToken] = useState('')
+  const [token, setToken] = useState(() => localStorage.getItem('authToken') ?? '')
   const [currentUser, setCurrentUser] = useState(null)
   const [authMessage, setAuthMessage] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
@@ -59,7 +59,7 @@ function App() {
 
   const [ownerAuthMode, setOwnerAuthMode] = useState('login')
   const [ownerForm, setOwnerForm] = useState({ name: '', email: '', password: '', restaurant_location: '' })
-  const [ownerToken, setOwnerToken] = useState('')
+  const [ownerToken, setOwnerToken] = useState(() => localStorage.getItem('ownerAuthToken') ?? '')
   const [currentOwner, setCurrentOwner] = useState(null)
   const [ownerMessage, setOwnerMessage] = useState('')
   const [ownerAuthLoading, setOwnerAuthLoading] = useState(false)
@@ -403,6 +403,22 @@ function App() {
       setMyReviewHistory([])
     }
   }, [token, apiRequest])
+
+  useEffect(() => {
+    if (token) {
+      localStorage.setItem('authToken', token)
+    } else {
+      localStorage.removeItem('authToken')
+    }
+  }, [token])
+
+  useEffect(() => {
+    if (ownerToken) {
+      localStorage.setItem('ownerAuthToken', ownerToken)
+    } else {
+      localStorage.removeItem('ownerAuthToken')
+    }
+  }, [ownerToken])
 
   useEffect(() => {
     loadRestaurants()
