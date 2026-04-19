@@ -12,6 +12,7 @@ export default function RestaurantDetailsPage({
   activeRestaurant,
   reviews,
   apiBaseUrl,
+  navigate,
 }) {
   const averageRating = reviews.length > 0
     ? (reviews.reduce((sum, item) => sum + Number(item.rating || 0), 0) / reviews.length)
@@ -148,6 +149,12 @@ export default function RestaurantDetailsPage({
           <div className="rd-section">
             <div className="rd-section-header rd-section-header--reviews">
               <span>Reviews</span>
+              <button
+                onClick={() => navigate('/write-review')}
+                style={{ fontSize: '0.85rem', padding: '0.4rem 0.9rem' }}
+              >
+                ✏️ Write a Review
+              </button>
               <div className="rd-review-summary">
                 {averageRatingDisplay ? (
                   <>

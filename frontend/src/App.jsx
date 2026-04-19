@@ -1543,6 +1543,7 @@ function App() {
           reviews={reviews}
           getRestaurantImage={getRestaurantImage}
           apiBaseUrl={apiBaseUrl}
+          navigate={navigate}
         />
       )
     }
