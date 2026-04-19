@@ -504,13 +504,13 @@ function App() {
     setAuthMessage('')
     setAuthLoading(true)
     try {
+      const loginFormData = new URLSearchParams()
+      loginFormData.append('username', authForm.email)
+      loginFormData.append('password', authForm.password)
       const loginData = await apiRequest('/auth/users/login', {
         method: 'POST',
-        body: JSON.stringify({
-          email: authForm.email,
-          password: authForm.password,
-        }),
-        headers: {},
+        body: loginFormData,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       })
       const userData = await apiRequest('/users/me', {
         method: 'GET',

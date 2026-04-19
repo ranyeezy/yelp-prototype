@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from ..deps import get_db
 from .. import schemas
@@ -12,8 +13,8 @@ def user_signup(payload: schemas.UserCreate, db: Session = Depends(get_db)):
     return crud.create_user(db, payload)
 
 @router.post("/users/login", response_model=schemas.Token)
-def user_login(payload: schemas.UserLogin, db: Session = Depends(get_db)):
-    user = crud.authenticate_user(db, payload.email, payload.password)
+def user_login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = crud.authenticate_user(db, form.username, form.password)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     token = create_access_token(subject=str(user.id), role="user")
