@@ -1,0 +1,108 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: yelp-mysql
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: yelp_prototype
+      MYSQL_USER: yelp_user
+      MYSQL_PASSWORD: yelp_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - yelp-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -proot_password --silent",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile.user
+    container_name: user-service
+    ports:
+      - "8001:8001"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://yelp_user:yelp_password@mysql:3306/yelp_prototype
+      JWT_SECRET: yelpsecretkey
+    volumes:
+      - ./services/user-service/uploads:/app/uploads
+    networks:
+      - yelp-network
+    restart: on-failure
+
+  restaurant-service:
+    build:
+      context: ./services/restaurant-service
+      dockerfile: Dockerfile.restaurant
+    container_name: restaurant-service
+    ports:
+      - "8002:8002"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://yelp_user:yelp_password@mysql:3306/yelp_prototype
+      JWT_SECRET: yelpsecretkey
+    volumes:
+      - ./services/restaurant-service/uploads:/app/uploads
+    networks:
+      - yelp-network
+    restart: on-failure
+
+  review-service:
+    build:
+      context: ./services/review-service
+      dockerfile: Dockerfile.review
+    container_name: review-service
+    ports:
+      - "8003:8003"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://yelp_user:yelp_password@mysql:3306/yelp_prototype
+      JWT_SECRET: yelpsecretkey
+    volumes:
+      - ./services/review-service/uploads:/app/uploads
+    networks:
+      - yelp-network
+    restart: on-failure
+
+  owner-service:
+    build:
+      context: ./services/owner-service
+      dockerfile: Dockerfile.owner
+    container_name: owner-service
+    ports:
+      - "8004:8004"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://yelp_user:yelp_password@mysql:3306/yelp_prototype
+      JWT_SECRET: yelpsecretkey
+    volumes:
+      - ./services/owner-service/uploads:/app/uploads
+    networks:
+      - yelp-network
+    restart: on-failure
+
+volumes:
+  mysql_data:
+
+networks:
+  yelp-network:
+    driver: bridge

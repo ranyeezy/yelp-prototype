@@ -302,4 +302,3 @@ class AIChatResponse(BaseModel):
     extracted_filters: dict
     recommendations: list[RecommendedRestaurant]
     web_context: list[dict] = []
-        
