@@ -1,29 +1,4 @@
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: yelp-mysql
-    ports:
-      - "3307:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: root_password
-      MYSQL_DATABASE: yelp_prototype
-      MYSQL_USER: yelp_user
-      MYSQL_PASSWORD: yelp_password
-    volumes:
-      - mysql_data:/var/lib/mysql
-    networks:
-      - yelp-network
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "mysqladmin ping -h 127.0.0.1 -uroot -proot_password --silent",
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-      start_period: 30s
-
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: yelp-zookeeper
@@ -58,6 +33,23 @@ services:
       timeout: 5s
       retries: 10
 
+  mongodb:
+    image: mongo:7.0
+    container_name: yelp-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: yelp_prototype
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - yelp-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   user-service:
     build:
       context: ./services/user-service
@@ -66,10 +58,10 @@ services:
     ports:
       - "8001:8001"
     depends_on:
-      mysql:
+      mongodb:
         condition: service_healthy
     environment:
-      DATABASE_URL: mysql+pymysql://yelp_user:yelp_password@mysql:3306/yelp_prototype
+      DATABASE_URL: mongodb://mongodb:27017/yelp_prototype
       JWT_SECRET: yelpsecretkey
       KAFKA_BROKER: kafka:9092
       SKIP_DB_INIT: "true"
@@ -87,12 +79,12 @@ services:
     ports:
       - "8002:8002"
     depends_on:
-      mysql:
+      mongodb:
         condition: service_healthy
       kafka:
         condition: service_healthy
     environment:
-      DATABASE_URL: mysql+pymysql://yelp_user:yelp_password@mysql:3306/yelp_prototype
+      DATABASE_URL: mongodb://mongodb:27017/yelp_prototype
       JWT_SECRET: yelpsecretkey
       KAFKA_BROKER: kafka:9092
       SKIP_DB_INIT: "true"
@@ -110,12 +102,12 @@ services:
     ports:
       - "8003:8003"
     depends_on:
-      mysql:
+      mongodb:
         condition: service_healthy
       kafka:
         condition: service_healthy
     environment:
-      DATABASE_URL: mysql+pymysql://yelp_user:yelp_password@mysql:3306/yelp_prototype
+      DATABASE_URL: mongodb://mongodb:27017/yelp_prototype
       JWT_SECRET: yelpsecretkey
       KAFKA_BROKER: kafka:9092
       SKIP_DB_INIT: "true"
@@ -133,10 +125,10 @@ services:
     ports:
       - "8004:8004"
     depends_on:
-      mysql:
+      mongodb:
         condition: service_healthy
     environment:
-      DATABASE_URL: mysql+pymysql://yelp_user:yelp_password@mysql:3306/yelp_prototype
+      DATABASE_URL: mongodb://mongodb:27017/yelp_prototype
       JWT_SECRET: yelpsecretkey
       KAFKA_BROKER: kafka:9092
       SKIP_DB_INIT: "true"
@@ -152,13 +144,13 @@ services:
       dockerfile: Dockerfile.review-worker
     container_name: review-worker-service
     depends_on:
-      mysql:
-        condition: service_healthy
       kafka:
         condition: service_healthy
+      mongodb:
+        condition: service_healthy
     environment:
+      DATABASE_URL: mongodb://mongodb:27017/yelp_prototype
       KAFKA_BROKER: kafka:9092
-      DATABASE_URL: mysql+pymysql://yelp_user:yelp_password@mysql:3306/yelp_prototype
     networks:
       - yelp-network
     restart: on-failure
@@ -169,19 +161,19 @@ services:
       dockerfile: Dockerfile.restaurant-worker
     container_name: restaurant-worker-service
     depends_on:
-      mysql:
-        condition: service_healthy
       kafka:
         condition: service_healthy
+      mongodb:
+        condition: service_healthy
     environment:
+      DATABASE_URL: mongodb://mongodb:27017/yelp_prototype
       KAFKA_BROKER: kafka:9092
-      DATABASE_URL: mysql+pymysql://yelp_user:yelp_password@mysql:3306/yelp_prototype
     networks:
       - yelp-network
     restart: on-failure
 
 volumes:
-  mysql_data:
+  mongodb_data:
 
 networks:
   yelp-network:
