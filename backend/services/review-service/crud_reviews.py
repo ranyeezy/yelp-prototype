@@ -5,7 +5,7 @@ import models
 import schemas
 
 
-def create_review(db: Session, user_id: int, payload: schemas.ReviewCreate):
+def validate_review_create(db: Session, user_id: int, payload: schemas.ReviewCreate):
     restaurant = db.get(models.Restaurant, payload.restaurant_id)
     if not restaurant:
         raise HTTPException(
@@ -27,6 +27,8 @@ def create_review(db: Session, user_id: int, payload: schemas.ReviewCreate):
             detail="You have already reviewed this restaurant",
         )
 
+
+def create_review(db: Session, user_id: int, payload: schemas.ReviewCreate):
     review = models.Review(
         user_id=user_id,
         restaurant_id=payload.restaurant_id,

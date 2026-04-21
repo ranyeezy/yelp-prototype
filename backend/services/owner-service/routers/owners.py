@@ -10,7 +10,7 @@ import crud_users_owners as crud
 import crud_owner_restaurants as owner_crud
 
 router = APIRouter(prefix="/owners", tags=["owners"])
-UPLOADS_DIR = Path(__file__).resolve().parents[1] / "uploads"
+UPLOADS_DIR = Path(__file__).resolve().parents[0] / "uploads"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 

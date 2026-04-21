@@ -19,6 +19,126 @@ data:
   MYSQL_PASSWORD: "yelp_password"
   MYSQL_DATABASE: "yelp_prototype"
   MYSQL_ROOT_PASSWORD: "root_password"
+  KAFKA_BROKER: "kafka-service:9092"
+  ZOOKEEPER_HOST: "zookeeper-service:2181"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zookeeper
+  namespace: yelp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      containers:
+        - name: zookeeper
+          image: confluentinc/cp-zookeeper:7.5.0
+          ports:
+            - containerPort: 2181
+          env:
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "2181"
+            - name: ZOOKEEPER_TICK_TIME
+              value: "2000"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-service
+  namespace: yelp
+spec:
+  selector:
+    app: zookeeper
+  ports:
+    - protocol: TCP
+      port: 2181
+      targetPort: 2181
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+  namespace: yelp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: confluentinc/cp-kafka:7.5.0
+          ports:
+            - containerPort: 9092
+          env:
+            - name: KAFKA_BROKER_ID
+              value: "1"
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: "zookeeper-service:2181"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://kafka-service:9092"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
+          livenessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-service
+  namespace: yelp
+spec:
+  selector:
+    app: kafka
+  ports:
+    - protocol: TCP
+      port: 9092
+      targetPort: 9092
+  type: ClusterIP
 
 ---
 apiVersion: apps/v1
@@ -37,55 +157,55 @@ spec:
         app: mysql
     spec:
       containers:
-      - name: mysql
-        image: mysql:8.0
-        ports:
-        - containerPort: 3306
-        env:
-        - name: MYSQL_ROOT_PASSWORD
-          valueFrom:
-            configMapKeyRef:
-              name: yelp-config
-              key: MYSQL_ROOT_PASSWORD
-        - name: MYSQL_DATABASE
-          valueFrom:
-            configMapKeyRef:
-              name: yelp-config
-              key: MYSQL_DATABASE
-        - name: MYSQL_USER
-          valueFrom:
-            configMapKeyRef:
-              name: yelp-config
-              key: MYSQL_USER
-        - name: MYSQL_PASSWORD
-          valueFrom:
-            configMapKeyRef:
-              name: yelp-config
-              key: MYSQL_PASSWORD
-        volumeMounts:
-        - name: mysql-storage
-          mountPath: /var/lib/mysql
-        livenessProbe:
-          exec:
-            command:
-            - mysqladmin
-            - ping
-            - -h
-            - localhost
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          exec:
-            command:
-            - mysqladmin
-            - ping
-            - -h
-            - localhost
-          initialDelaySeconds: 10
-          periodSeconds: 5
+        - name: mysql
+          image: mysql:8.0
+          ports:
+            - containerPort: 3306
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: MYSQL_ROOT_PASSWORD
+            - name: MYSQL_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: MYSQL_DATABASE
+            - name: MYSQL_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: MYSQL_USER
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: MYSQL_PASSWORD
+          volumeMounts:
+            - name: mysql-storage
+              mountPath: /var/lib/mysql
+          livenessProbe:
+            exec:
+              command:
+                - mysqladmin
+                - ping
+                - -h
+                - localhost
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - mysqladmin
+                - ping
+                - -h
+                - localhost
+            initialDelaySeconds: 10
+            periodSeconds: 5
       volumes:
-      - name: mysql-storage
-        emptyDir: {}
+        - name: mysql-storage
+          emptyDir: {}
 
 ---
 apiVersion: v1
@@ -97,9 +217,9 @@ spec:
   selector:
     app: mysql
   ports:
-  - protocol: TCP
-    port: 3306
-    targetPort: 3306
+    - protocol: TCP
+      port: 3306
+      targetPort: 3306
   type: ClusterIP
 
 ---
@@ -119,43 +239,48 @@ spec:
         app: user-service
     spec:
       containers:
-      - name: user-service
-        image: backend-user-service:latest
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 8001
-        env:
-        - name: DATABASE_URL
-          valueFrom:
-            configMapKeyRef:
-              name: yelp-config
-              key: DATABASE_URL
-        - name: JWT_SECRET
-          valueFrom:
-            configMapKeyRef:
-              name: yelp-config
-              key: JWT_SECRET
-        - name: SKIP_DB_INIT
-          value: "true"
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 8001
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 8001
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
+        - name: user-service
+          image: backend-user-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8001
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: DATABASE_URL
+            - name: JWT_SECRET
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: JWT_SECRET
+            - name: SKIP_DB_INIT
+              value: "true"
+            - name: KAFKA_BROKER
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: KAFKA_BROKER
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
 
 ---
 apiVersion: v1
@@ -167,9 +292,9 @@ spec:
   selector:
     app: user-service
   ports:
-  - protocol: TCP
-    port: 8001
-    targetPort: 8001
+    - protocol: TCP
+      port: 8001
+      targetPort: 8001
   type: LoadBalancer
 
 ---
@@ -189,43 +314,48 @@ spec:
         app: restaurant-service
     spec:
       containers:
-      - name: restaurant-service
-        image: backend-restaurant-service:latest
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 8002
-        env:
-        - name: DATABASE_URL
-          valueFrom:
-            configMapKeyRef:
-              name: yelp-config
-              key: DATABASE_URL
-        - name: JWT_SECRET
-          valueFrom:
-            configMapKeyRef:
-              name: yelp-config
-              key: JWT_SECRET
-        - name: SKIP_DB_INIT
-          value: "true"
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 8002
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 8002
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
+        - name: restaurant-service
+          image: backend-restaurant-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8002
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: DATABASE_URL
+            - name: JWT_SECRET
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: JWT_SECRET
+            - name: SKIP_DB_INIT
+              value: "true"
+            - name: KAFKA_BROKER
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: KAFKA_BROKER
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8002
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8002
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
 
 ---
 apiVersion: v1
@@ -237,9 +367,9 @@ spec:
   selector:
     app: restaurant-service
   ports:
-  - protocol: TCP
-    port: 8002
-    targetPort: 8002
+    - protocol: TCP
+      port: 8002
+      targetPort: 8002
   type: LoadBalancer
 
 ---
@@ -259,43 +389,48 @@ spec:
         app: review-service
     spec:
       containers:
-      - name: review-service
-        image: backend-review-service:latest
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 8003
-        env:
-        - name: DATABASE_URL
-          valueFrom:
-            configMapKeyRef:
-              name: yelp-config
-              key: DATABASE_URL
-        - name: JWT_SECRET
-          valueFrom:
-            configMapKeyRef:
-              name: yelp-config
-              key: JWT_SECRET
-        - name: SKIP_DB_INIT
-          value: "true"
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 8003
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 8003
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
+        - name: review-service
+          image: backend-review-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8003
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: DATABASE_URL
+            - name: JWT_SECRET
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: JWT_SECRET
+            - name: SKIP_DB_INIT
+              value: "true"
+            - name: KAFKA_BROKER
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: KAFKA_BROKER
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8003
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8003
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
 
 ---
 apiVersion: v1
@@ -307,9 +442,9 @@ spec:
   selector:
     app: review-service
   ports:
-  - protocol: TCP
-    port: 8003
-    targetPort: 8003
+    - protocol: TCP
+      port: 8003
+      targetPort: 8003
   type: LoadBalancer
 
 ---
@@ -329,43 +464,48 @@ spec:
         app: owner-service
     spec:
       containers:
-      - name: owner-service
-        image: backend-owner-service:latest
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 8004
-        env:
-        - name: DATABASE_URL
-          valueFrom:
-            configMapKeyRef:
-              name: yelp-config
-              key: DATABASE_URL
-        - name: JWT_SECRET
-          valueFrom:
-            configMapKeyRef:
-              name: yelp-config
-              key: JWT_SECRET
-        - name: SKIP_DB_INIT
-          value: "true"
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 8004
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 8004
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
+        - name: owner-service
+          image: backend-owner-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8004
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: DATABASE_URL
+            - name: JWT_SECRET
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: JWT_SECRET
+            - name: SKIP_DB_INIT
+              value: "true"
+            - name: KAFKA_BROKER
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: KAFKA_BROKER
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8004
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8004
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
 
 ---
 apiVersion: v1
@@ -377,7 +517,103 @@ spec:
   selector:
     app: owner-service
   ports:
-  - protocol: TCP
-    port: 8004
-    targetPort: 8004
+    - protocol: TCP
+      port: 8004
+      targetPort: 8004
   type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: review-worker-service
+  namespace: yelp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: review-worker-service
+  template:
+    metadata:
+      labels:
+        app: review-worker-service
+    spec:
+      containers:
+        - name: review-worker-service
+          image: backend-review-worker-service:latest
+          imagePullPolicy: Never
+          env:
+            - name: KAFKA_BROKER
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: KAFKA_BROKER
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: DATABASE_URL
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "kill -0 1"
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restaurant-worker-service
+  namespace: yelp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: restaurant-worker-service
+  template:
+    metadata:
+      labels:
+        app: restaurant-worker-service
+    spec:
+      containers:
+        - name: restaurant-worker-service
+          image: backend-restaurant-worker-service:latest
+          imagePullPolicy: Never
+          env:
+            - name: KAFKA_BROKER
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: KAFKA_BROKER
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: yelp-config
+                  key: DATABASE_URL
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "kill -0 1"
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
