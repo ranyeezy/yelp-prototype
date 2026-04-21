@@ -1,11 +1,11 @@
 from pathlib import Path
 import uuid
+from bson import ObjectId
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
-from sqlalchemy.orm import Session
-from deps import get_db, get_current_owner
-from schemas import RestaurantPhotoUploadOut, OwnerOut, OwnerUpdate
-import models
+from deps import get_current_owner
+from schemas import RestaurantPhotoUploadOut, OwnerOut, OwnerUpdate, OwnerRestaurantSummaryOut, OwnerClaimRestaurantOut, OwnerDashboardOut
+from database import db
 import crud_users_owners as crud
 import crud_owner_restaurants as owner_crud
 
@@ -26,18 +26,18 @@ def upload_owner_restaurant_photo(
     if extension not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type")
 
-    unique_name = f"owner_restaurant_{current_owner.id}_{uuid.uuid4().hex}{extension}"
+    unique_name = f"owner_restaurant_{current_owner['id']}_{uuid.uuid4().hex}{extension}"
     destination = UPLOADS_DIR / unique_name
     with destination.open("wb") as output_file:
         output_file.write(photo.file.read())
 
     return RestaurantPhotoUploadOut(photo_url=f"/uploads/{unique_name}")
 
-@router.get("/claimed-restaurant-ids", response_model=list[int])
-def get_all_claimed_restaurant_ids(db: Session = Depends(get_db)):
+@router.get("/claimed-restaurant-ids", response_model=list[str])
+def get_all_claimed_restaurant_ids():
     """Return all restaurant IDs that have been claimed by any owner."""
-    rows = db.query(models.OwnerRestaurant.restaurant_id).distinct().all()
-    return [row[0] for row in rows]
+    claims = db.owner_restaurants.find({}, {"restaurant_id": 1})
+    return [str(claim["restaurant_id"]) for claim in claims]
 
 @router.get("/me", response_model=OwnerOut)
 def get_me(current_owner=Depends(get_current_owner)):
@@ -46,37 +46,37 @@ def get_me(current_owner=Depends(get_current_owner)):
 @router.put("/me", response_model=OwnerOut)
 def update_me(
     payload: OwnerUpdate,
-    db: Session = Depends(get_db),
     current_owner=Depends(get_current_owner),
 ):
-    return crud.update_owner(db, current_owner, payload)
+    owner_id = str(current_owner["id"])
+    return crud.update_owner(owner_id, payload)
 
-@router.get("/restaurants/claimed", response_model=list)
+@router.get("/restaurants/claimed", response_model=list[OwnerRestaurantSummaryOut])
 def get_my_claimed_restaurants(
-    db: Session = Depends(get_db),
     current_owner=Depends(get_current_owner),
 ):
-    return owner_crud.list_claimed_restaurants(db, current_owner.id)
+    owner_id = str(current_owner["id"])
+    return owner_crud.list_claimed_restaurants(owner_id)
 
-@router.post("/restaurants/{restaurant_id}/claim")
+@router.post("/restaurants/{restaurant_id}/claim", response_model=OwnerClaimRestaurantOut)
 def claim_restaurant(
-    restaurant_id: int,
-    db: Session = Depends(get_db),
+    restaurant_id: str,
     current_owner=Depends(get_current_owner),
 ):
-    return owner_crud.claim_restaurant(db, current_owner.id, restaurant_id)
+    owner_id = str(current_owner["id"])
+    return owner_crud.claim_restaurant(owner_id, restaurant_id)
 
 @router.delete("/restaurants/{restaurant_id}/unclaim", status_code=204)
 def unclaim_restaurant(
-    restaurant_id: int,
-    db: Session = Depends(get_db),
+    restaurant_id: str,
     current_owner=Depends(get_current_owner),
 ):
-    owner_crud.unclaim_restaurant(db, current_owner.id, restaurant_id)
+    owner_id = str(current_owner["id"])
+    owner_crud.unclaim_restaurant(owner_id, restaurant_id)
 
-@router.get("/dashboard")
+@router.get("/dashboard", response_model=OwnerDashboardOut)
 def get_dashboard(
-    db: Session = Depends(get_db),
     current_owner=Depends(get_current_owner),
 ):
-    return owner_crud.get_owner_dashboard(db, current_owner.id)
+    owner_id = str(current_owner["id"])
+    return owner_crud.get_owner_dashboard(owner_id)
