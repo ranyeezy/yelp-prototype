@@ -3,6 +3,26 @@ from typing import Optional
 from datetime import datetime
 
 #auth
+
+from bson import ObjectId
+from pydantic import model_validator
+
+class MongoBaseModel(BaseModel):
+    @model_validator(mode='before')
+    @classmethod
+    def stringify_objectids(cls, values):
+        if isinstance(values, dict):
+            result = {}
+            for k, v in values.items():
+                if k == '_id':
+                    result['id'] = str(v)
+                elif isinstance(v, ObjectId):
+                    result[k] = str(v)
+                else:
+                    result[k] = v
+            return result
+        return values
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -29,8 +49,8 @@ class UserUpdate(BaseModel):
     gender: Optional[str] = Field(default=None)
     profile_photo: Optional[str] = Field(default=None)
 
-class UserOut(BaseModel):
-    id: int
+class UserOut(MongoBaseModel):
+    id: str
     name: str
     email: EmailStr
     phone: Optional[str] = None
@@ -43,9 +63,6 @@ class UserOut(BaseModel):
     profile_photo: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 #owner
 class OwnerCreate(BaseModel):
@@ -63,30 +80,24 @@ class OwnerUpdate(BaseModel):
     email: Optional[EmailStr] = None
     restaurant_location: Optional[str] = Field(default=None)
 
-class OwnerOut(BaseModel):
-    id: int
+class OwnerOut(MongoBaseModel):
+    id: str
     name: str
     email: EmailStr
     restaurant_location: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
 
-
-class OwnerClaimRestaurantOut(BaseModel):
-    id: int
-    owner_id: int
-    restaurant_id: int
+class OwnerClaimRestaurantOut(MongoBaseModel):
+    id: str
+    owner_id: str
+    restaurant_id: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
 
-
-class OwnerRestaurantSummaryOut(BaseModel):
-    id: int
+class OwnerRestaurantSummaryOut(MongoBaseModel):
+    id: str
     name: str
     cuisine_type: str
     city: str
@@ -94,19 +105,19 @@ class OwnerRestaurantSummaryOut(BaseModel):
     review_count: int
 
 
-class OwnerRecentReviewOut(BaseModel):
-    review_id: int
-    restaurant_id: int
+class OwnerRecentReviewOut(MongoBaseModel):
+    review_id: str
+    restaurant_id: str
     restaurant_name: str
     rating: int
     comment: Optional[str] = None
     created_at: datetime
 
 
-class OwnerDashboardOut(BaseModel):
+class OwnerDashboardOut(MongoBaseModel):
     claimed_restaurants: int
     total_reviews: int
-    total_views: int = 0
+    total_favorites: int = 0
     avg_rating: Optional[float] = None
     ratings_distribution: dict[str, int] = {}
     positive_reviews: int = 0
@@ -117,11 +128,11 @@ class OwnerDashboardOut(BaseModel):
     recent_reviews: list[OwnerRecentReviewOut] = []
 
 
-class OwnerRestaurantReviewOut(BaseModel):
-    id: int
-    user_id: int
+class OwnerRestaurantReviewOut(MongoBaseModel):
+    id: str
+    user_id: str
     user_name: str
-    restaurant_id: int
+    restaurant_id: str
     rating: int
     comment: Optional[str] = None
     photo_url: Optional[str] = None
@@ -139,8 +150,8 @@ class UserPreferencesIn(BaseModel):
     ambiance: Optional[str] = None
     sort_preference: Optional[str] = None
 
-class UserPreferencesOut(BaseModel):
-    user_id: int
+class UserPreferencesOut(MongoBaseModel):
+    user_id: str
     cuisines: Optional[str] = None
     price_min: Optional[int] = Field(default=None, ge=1, le=4)
     price_max: Optional[int] = Field(default=None, ge=1, le=4)
@@ -150,9 +161,6 @@ class UserPreferencesOut(BaseModel):
     ambiance: Optional[str] = None
     sort_preference: Optional[str] = None
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 #restaunrant
 class RestaurantCreate(BaseModel):
@@ -185,8 +193,8 @@ class RestaurantUpdate(BaseModel):
     amenities: Optional[str] = None
     photo_url: Optional[str] = None
 
-class RestaurantOut(BaseModel):
-    id: int
+class RestaurantOut(MongoBaseModel):
+    id: str
     name: str
     cuisine_type: str
     address: str
@@ -200,21 +208,18 @@ class RestaurantOut(BaseModel):
     hours: Optional[str] = None
     amenities: Optional[str] = None
     photo_url: Optional[str] = None
-    listed_by_user_id: Optional[int] = None
+    listed_by_user_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
 
-
-class RestaurantPhotoUploadOut(BaseModel):
+class RestaurantPhotoUploadOut(MongoBaseModel):
     photo_url: str
 
 
 # review
 class ReviewCreate(BaseModel):
-    restaurant_id: int
+    restaurant_id: str
     rating: int = Field(ge=1, le=5)
     comment: Optional[str] = None
     photo_url: Optional[str] = None
@@ -226,25 +231,22 @@ class ReviewUpdate(BaseModel):
     photo_url: Optional[str] = None
 
 
-class ReviewOut(BaseModel):
-    id: int
-    user_id: int
+class ReviewOut(MongoBaseModel):
+    id: str
+    user_id: str
     user_name: Optional[str] = None
-    restaurant_id: int
+    restaurant_id: str
     rating: int
     comment: Optional[str] = None
     photo_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
 
-
-class UserReviewHistoryOut(BaseModel):
-    id: int
+class UserReviewHistoryOut(MongoBaseModel):
+    id: str
     user_name: Optional[str] = None
-    restaurant_id: int
+    restaurant_id: str
     restaurant_name: str
     restaurant_city: Optional[str] = None
     rating: int
@@ -254,23 +256,20 @@ class UserReviewHistoryOut(BaseModel):
     updated_at: datetime
 
 
-class ReviewPhotoUploadOut(BaseModel):
+class ReviewPhotoUploadOut(MongoBaseModel):
     photo_url: str
 
 
 # favorites
-class FavoriteOut(BaseModel):
-    id: int
-    user_id: int
-    restaurant_id: int
+class FavoriteOut(MongoBaseModel):
+    id: str
+    user_id: str
+    restaurant_id: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
 
-
-class FavoriteRestaurantOut(BaseModel):
-    favorite_id: int
+class FavoriteRestaurantOut(MongoBaseModel):
+    favorite_id: str
     favorited_at: datetime
     restaurant: RestaurantOut
 
@@ -286,8 +285,8 @@ class AIChatRequest(BaseModel):
     conversation_history: list[ChatMessage] = Field(default_factory=list)
 
 
-class RecommendedRestaurant(BaseModel):
-    id: int
+class RecommendedRestaurant(MongoBaseModel):
+    id: str
     name: str
     cuisine_type: str
     city: str
