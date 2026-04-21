@@ -1,28 +1,41 @@
 import os
-from dotenv import load_dotenv
+from pymongo import MongoClient
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+MONGODB_URL = os.getenv("DATABASE_URL", "mongodb://mongodb-service:27017/yelp_prototype")
 
-load_dotenv()
+client = MongoClient(MONGODB_URL, serverSelectionTimeoutMS=5000)
+db = client.yelp_prototype
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-  raise RuntimeError("DATABASE_URL not set. Create backend/.env with DATABASE_URL=mysql+pymysql://user:password@mysql:3306/yelp_prototype")
+# Create indexes for common queries
+def init_db():
+    """Initialize database indexes"""
+    if db is None:
+        return
+    
+    # Users collection indexes
+    db.users.create_index("email", unique=True)
+    
+    # Owners collection indexes
+    db.owners.create_index("email", unique=True)
+    
+    # Restaurants collection indexes
+    db.restaurants.create_index("name")
+    db.restaurants.create_index("city")
+    db.restaurants.create_index("listed_by_user_id")
+    
+    # Reviews collection indexes
+    db.reviews.create_index("restaurant_id")
+    db.reviews.create_index("user_id")
+    db.reviews.create_index([("user_id", 1), ("restaurant_id", 1)], unique=True)
+    
+    # Sessions collection indexes with TTL
+    db.sessions.create_index("expires_at", expireAfterSeconds=0)
+    db.sessions.create_index("user_id")
+    
+    # Favorites collection indexes
+    db.favorites.create_index([("user_id", 1), ("restaurant_id", 1)], unique=True)
+    
+    print("MongoDB indexes created successfully")
 
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-Base = declarative_base()
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# Initialize on startup
+init_db()

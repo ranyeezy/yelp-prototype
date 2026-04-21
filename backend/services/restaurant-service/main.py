@@ -27,14 +27,16 @@ uploads_path = Path(__file__).resolve().parents[0] / "uploads"
 uploads_path.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
 
-# Database startup
-from database import Base, engine
+# MongoDB initialization
+from database import init_db
 
 @app.on_event("startup")
 def startup():
-    Base.metadata.create_all(bind=engine)
-        
-
+    try:
+        init_db()
+    except Exception as e:
+        print(f"Warning: Could not initialize database at startup: {e}")
+        pass
 
 # Include routers
 app.include_router(restaurants.router)

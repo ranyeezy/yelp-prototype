@@ -1,48 +1,51 @@
+from datetime import datetime
+from bson import ObjectId
 from fastapi import HTTPException, status
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-
-import models
+from database import db
 
 
-def _attach_restaurant_photo_url(restaurant: models.Restaurant):
-    photos = getattr(restaurant, "photos", None) or []
-    primary_photo_url = photos[0].photo_url if photos else None
-    setattr(restaurant, "photo_url", primary_photo_url)
+def _attach_restaurant_photo_url(restaurant: dict):
+    """Attach primary photo URL to restaurant document"""
+    photos = restaurant.get("photos", [])
+    primary_photo_url = photos[0] if photos else None
+    restaurant["photo_url"] = primary_photo_url
     return restaurant
 
 
-def _set_primary_photo(db: Session, restaurant_id: int, photo_url: str | None):
-    existing_photos = (
-        db.query(models.RestaurantPhoto)
-        .filter(models.RestaurantPhoto.restaurant_id == restaurant_id)
-        .order_by(models.RestaurantPhoto.id.asc())
-        .all()
-    )
-
+def _set_primary_photo(restaurant_id: str, photo_url: str | None):
+    """Update or set primary photo for restaurant"""
     if not photo_url:
-        for photo in existing_photos:
-            db.delete(photo)
+        # Remove all photos
+        db.restaurants.update_one(
+            {"_id": ObjectId(restaurant_id)},
+            {"$set": {"photos": []}}
+        )
         return
+
+    # Get existing photos
+    restaurant = db.restaurants.find_one({"_id": ObjectId(restaurant_id)})
+    existing_photos = restaurant.get("photos", [])
 
     if existing_photos:
-        existing_photos[0].photo_url = photo_url
-        for extra_photo in existing_photos[1:]:
-            db.delete(extra_photo)
-        return
-
-    db.add(models.RestaurantPhoto(restaurant_id=restaurant_id, photo_url=photo_url))
-
-
-def _ensure_claim(db: Session, owner_id: int, restaurant_id: int):
-    claim = (
-        db.query(models.OwnerRestaurant)
-        .filter(
-            models.OwnerRestaurant.owner_id == owner_id,
-            models.OwnerRestaurant.restaurant_id == restaurant_id,
+        # Replace first photo, remove others
+        db.restaurants.update_one(
+            {"_id": ObjectId(restaurant_id)},
+            {"$set": {"photos": [photo_url]}}
         )
-        .first()
-    )
+    else:
+        # Add new photo
+        db.restaurants.update_one(
+            {"_id": ObjectId(restaurant_id)},
+            {"$push": {"photos": photo_url}}
+        )
+
+
+def _ensure_claim(owner_id: str, restaurant_id: str):
+    """Verify owner has claimed this restaurant"""
+    claim = db.owner_restaurants.find_one({
+        "owner_id": ObjectId(owner_id),
+        "restaurant_id": ObjectId(restaurant_id),
+    })
     if claim is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -51,21 +54,20 @@ def _ensure_claim(db: Session, owner_id: int, restaurant_id: int):
     return claim
 
 
-def claim_restaurant(db: Session, owner_id: int, restaurant_id: int):
-    restaurant = db.get(models.Restaurant, restaurant_id)
+def claim_restaurant(owner_id: str, restaurant_id: str):
+    """Owner claims a restaurant"""
+    restaurant = db.restaurants.find_one({"_id": ObjectId(restaurant_id)})
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found",
         )
 
-    existing = (
-        db.query(models.OwnerRestaurant)
-        .filter(models.OwnerRestaurant.restaurant_id == restaurant_id)
-        .first()
-    )
+    existing = db.owner_restaurants.find_one({
+        "restaurant_id": ObjectId(restaurant_id)
+    })
     if existing:
-        if existing.owner_id == owner_id:
+        if str(existing["owner_id"]) == owner_id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Restaurant already claimed by this owner",
@@ -75,78 +77,90 @@ def claim_restaurant(db: Session, owner_id: int, restaurant_id: int):
             detail="Restaurant is already claimed by another owner",
         )
 
-    claim = models.OwnerRestaurant(owner_id=owner_id, restaurant_id=restaurant_id)
-    db.add(claim)
-    db.commit()
-    db.refresh(claim)
-    return claim
+    claim_doc = {
+        "owner_id": ObjectId(owner_id),
+        "restaurant_id": ObjectId(restaurant_id),
+        "created_at": datetime.utcnow(),
+    }
+    result = db.owner_restaurants.insert_one(claim_doc)
+    claim_doc["id"] = result.inserted_id
+    return claim_doc
 
 
-def create_owner_restaurant(db: Session, owner_id: int, payload):
+def create_owner_restaurant(owner_id: str, payload):
+    """Owner creates a new restaurant they automatically claim"""
     payload_data = payload.model_dump(exclude={"photo_url"})
-    restaurant = models.Restaurant(**payload_data)
-    db.add(restaurant)
-    db.commit()
-    db.refresh(restaurant)
+    
+    restaurant_doc = {
+        **payload_data,
+        "listed_by_user_id": ObjectId(owner_id),
+        "photos": [],
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+    }
+    
+    result = db.restaurants.insert_one(restaurant_doc)
+    restaurant_doc["id"] = result.inserted_id
 
-    claim = models.OwnerRestaurant(owner_id=owner_id, restaurant_id=restaurant.id)
-    db.add(claim)
+    # Auto-claim restaurant for owner
+    claim_doc = {
+        "owner_id": ObjectId(owner_id),
+        "restaurant_id": result.inserted_id,
+        "created_at": datetime.utcnow(),
+    }
+    db.owner_restaurants.insert_one(claim_doc)
 
     if payload.photo_url:
-        _set_primary_photo(db, restaurant.id, payload.photo_url)
+        _set_primary_photo(str(result.inserted_id), payload.photo_url)
+        restaurant_doc["photos"] = [payload.photo_url]
 
-    db.commit()
-    db.refresh(restaurant)
-    return _attach_restaurant_photo_url(restaurant)
-
-
-def unclaim_restaurant(db: Session, owner_id: int, restaurant_id: int):
-    claim = _ensure_claim(db, owner_id, restaurant_id)
-    db.delete(claim)
-    db.commit()
+    return _attach_restaurant_photo_url(restaurant_doc)
 
 
-def list_claimed_restaurants(db: Session, owner_id: int):
-    claims = (
-        db.query(models.OwnerRestaurant)
-        .filter(models.OwnerRestaurant.owner_id == owner_id)
-        .all()
-    )
+def unclaim_restaurant(owner_id: str, restaurant_id: str):
+    """Owner unclaims a restaurant"""
+    _ensure_claim(owner_id, restaurant_id)
+    db.owner_restaurants.delete_one({
+        "owner_id": ObjectId(owner_id),
+        "restaurant_id": ObjectId(restaurant_id),
+    })
+
+
+def list_claimed_restaurants(owner_id: str):
+    """List all restaurants claimed by owner with ratings"""
+    claims = list(db.owner_restaurants.find({"owner_id": ObjectId(owner_id)}))
 
     summaries = []
     for claim in claims:
-        restaurant = db.get(models.Restaurant, claim.restaurant_id)
+        restaurant = db.restaurants.find_one({"_id": claim["restaurant_id"]})
         if restaurant is None:
             continue
 
-        rating_stats = (
-            db.query(
-                func.avg(models.Review.rating).label("avg_rating"),
-                func.count(models.Review.id).label("review_count"),
-            )
-            .filter(models.Review.restaurant_id == restaurant.id)
-            .one()
-        )
+        # Calculate rating stats
+        reviews = list(db.reviews.find({"restaurant_id": restaurant["_id"]}))
+        ratings = [r["rating"] for r in reviews]
+        
+        avg_rating = None
+        if ratings:
+            avg_rating = sum(ratings) / len(ratings)
+        
+        review_count = len(reviews)
 
-        avg_rating = float(rating_stats.avg_rating) if rating_stats.avg_rating is not None else None
-        review_count = int(rating_stats.review_count or 0)
-
-        summaries.append(
-            {
-                "id": restaurant.id,
-                "name": restaurant.name,
-                "cuisine_type": restaurant.cuisine_type,
-                "city": restaurant.city,
-                "avg_rating": avg_rating,
-                "review_count": review_count,
-            }
-        )
+        summaries.append({
+            "id": restaurant["_id"],
+            "name": restaurant["name"],
+            "cuisine_type": restaurant["cuisine_type"],
+            "city": restaurant["city"],
+            "avg_rating": avg_rating,
+            "review_count": review_count,
+        })
 
     return summaries
 
 
-def get_owner_dashboard(db: Session, owner_id: int):
-    restaurants = list_claimed_restaurants(db, owner_id)
+def get_owner_dashboard(owner_id: str):
+    """Get owner dashboard with analytics"""
+    restaurants = list_claimed_restaurants(owner_id)
 
     claimed_restaurants = len(restaurants)
     total_reviews = sum(item["review_count"] for item in restaurants)
@@ -165,19 +179,16 @@ def get_owner_dashboard(db: Session, owner_id: int):
     recent_reviews = []
 
     if restaurant_ids:
-        favorites_count = (
-            db.query(func.count(models.Favorite.id))
-            .filter(models.Favorite.restaurant_id.in_(restaurant_ids))
-            .scalar()
-        )
-        total_favorites = int(favorites_count or 0)
+        # Count favorites
+        total_favorites = db.favorites.count_documents({
+            "restaurant_id": {"$in": restaurant_ids}
+        })
 
-        rating_rows = (
-            db.query(models.Review.rating)
-            .filter(models.Review.restaurant_id.in_(restaurant_ids))
-            .all()
-        )
-        for (rating_value,) in rating_rows:
+        # Analyze ratings distribution
+        reviews = list(db.reviews.find({"restaurant_id": {"$in": restaurant_ids}}))
+        
+        for review in reviews:
+            rating_value = review["rating"]
             normalized_rating = int(rating_value)
             if str(normalized_rating) in ratings_distribution:
                 ratings_distribution[str(normalized_rating)] += 1
@@ -189,25 +200,24 @@ def get_owner_dashboard(db: Session, owner_id: int):
             else:
                 neutral_reviews += 1
 
-        rows = (
-            db.query(models.Review, models.Restaurant)
-            .join(models.Restaurant, models.Review.restaurant_id == models.Restaurant.id)
-            .filter(models.Review.restaurant_id.in_(restaurant_ids))
-            .order_by(models.Review.created_at.desc())
+        # Get recent reviews
+        recent_review_docs = list(
+            db.reviews.find({"restaurant_id": {"$in": restaurant_ids}})
+            .sort("created_at", -1)
             .limit(10)
-            .all()
         )
-        recent_reviews = [
-            {
-                "review_id": review.id,
-                "restaurant_id": restaurant.id,
-                "restaurant_name": restaurant.name,
-                "rating": review.rating,
-                "comment": review.comment,
-                "created_at": review.created_at,
-            }
-            for review, restaurant in rows
-        ]
+        
+        for review in recent_review_docs:
+            restaurant = db.restaurants.find_one({"_id": review["restaurant_id"]})
+            if restaurant:
+                recent_reviews.append({
+                    "review_id": review["_id"],
+                    "restaurant_id": review["restaurant_id"],
+                    "restaurant_name": restaurant["name"],
+                    "rating": review["rating"],
+                    "comment": review["comment"],
+                    "created_at": review["created_at"],
+                })
 
     sentiment_summary = "Neutral"
     if positive_reviews > max(neutral_reviews, negative_reviews):
@@ -230,52 +240,63 @@ def get_owner_dashboard(db: Session, owner_id: int):
     }
 
 
-def get_claimed_restaurant(db: Session, owner_id: int, restaurant_id: int):
-    _ensure_claim(db, owner_id, restaurant_id)
-    restaurant = db.get(models.Restaurant, restaurant_id)
+def get_claimed_restaurant(owner_id: str, restaurant_id: str):
+    """Get a claimed restaurant (verify ownership)"""
+    _ensure_claim(owner_id, restaurant_id)
+    restaurant = db.restaurants.find_one({"_id": ObjectId(restaurant_id)})
     if restaurant is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found",
         )
+    restaurant["id"] = restaurant["_id"]
     return _attach_restaurant_photo_url(restaurant)
 
 
-def update_claimed_restaurant(db: Session, owner_id: int, restaurant_id: int, payload):
-    restaurant = get_claimed_restaurant(db, owner_id, restaurant_id)
+def update_claimed_restaurant(owner_id: str, restaurant_id: str, payload):
+    """Update a claimed restaurant"""
+    restaurant = get_claimed_restaurant(owner_id, restaurant_id)
     data = payload.model_dump(exclude_unset=True, exclude={"photo_url"})
-    for key, value in data.items():
-        setattr(restaurant, key, value)
-
-    if "photo_url" in payload.model_fields_set:
-        _set_primary_photo(db, restaurant.id, payload.photo_url)
-
-    db.commit()
-    db.refresh(restaurant)
-    return _attach_restaurant_photo_url(restaurant)
-
-
-def list_claimed_restaurant_reviews(db: Session, owner_id: int, restaurant_id: int):
-    _ensure_claim(db, owner_id, restaurant_id)
-    rows = (
-        db.query(models.Review, models.User)
-        .join(models.User, models.Review.user_id == models.User.id)
-        .filter(models.Review.restaurant_id == restaurant_id)
-        .order_by(models.Review.created_at.desc())
-        .all()
+    data["updated_at"] = datetime.utcnow()
+    
+    db.restaurants.update_one(
+        {"_id": ObjectId(restaurant_id)},
+        {"$set": data}
     )
 
-    return [
-        {
-            "id": review.id,
-            "user_id": review.user_id,
-            "user_name": user.name,
-            "restaurant_id": review.restaurant_id,
-            "rating": review.rating,
-            "comment": review.comment,
-            "photo_url": review.photo_url,
-            "created_at": review.created_at,
-            "updated_at": review.updated_at,
-        }
-        for review, user in rows
-    ]
+    if "photo_url" in payload.model_fields_set:
+        _set_primary_photo(restaurant_id, payload.photo_url)
+
+    restaurant = db.restaurants.find_one({"_id": ObjectId(restaurant_id)})
+    restaurant["id"] = restaurant["_id"]
+    return _attach_restaurant_photo_url(restaurant)
+
+
+def list_claimed_restaurant_reviews(owner_id: str, restaurant_id: str):
+    """List reviews for a claimed restaurant"""
+    _ensure_claim(owner_id, restaurant_id)
+    
+    reviews = list(
+        db.reviews.find({"restaurant_id": ObjectId(restaurant_id)})
+        .sort("created_at", -1)
+    )
+
+    result = []
+    for review in reviews:
+        user = db.users.find_one({"_id": review["user_id"]})
+        if user is None:
+            continue
+        
+        result.append({
+            "id": review["_id"],
+            "user_id": review["user_id"],
+            "user_name": user["name"],
+            "restaurant_id": review["restaurant_id"],
+            "rating": review["rating"],
+            "comment": review["comment"],
+            "photo_url": review["photo_url"],
+            "created_at": review["created_at"],
+            "updated_at": review["updated_at"],
+        })
+    
+    return result

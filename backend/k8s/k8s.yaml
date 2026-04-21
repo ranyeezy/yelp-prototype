@@ -14,11 +14,7 @@ metadata:
   namespace: yelp
 data:
   JWT_SECRET: "yelpsecretkey"
-  DATABASE_URL: "mysql+pymysql://yelp_user:yelp_password@mysql-service:3306/yelp_prototype"
-  MYSQL_USER: "yelp_user"
-  MYSQL_PASSWORD: "yelp_password"
-  MYSQL_DATABASE: "yelp_prototype"
-  MYSQL_ROOT_PASSWORD: "root_password"
+  DATABASE_URL: "mongodb://mongodb-service:27017/yelp_prototype"
   KAFKA_BROKER: "kafka-service:9092"
   ZOOKEEPER_HOST: "zookeeper-service:2181"
 
@@ -144,82 +140,69 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mysql
+  name: mongodb
   namespace: yelp
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: mysql
+      app: mongodb
   template:
     metadata:
       labels:
-        app: mysql
+        app: mongodb
     spec:
       containers:
-        - name: mysql
-          image: mysql:8.0
+        - name: mongodb
+          image: mongo:7.0
           ports:
-            - containerPort: 3306
+            - containerPort: 27017
           env:
-            - name: MYSQL_ROOT_PASSWORD
-              valueFrom:
-                configMapKeyRef:
-                  name: yelp-config
-                  key: MYSQL_ROOT_PASSWORD
-            - name: MYSQL_DATABASE
-              valueFrom:
-                configMapKeyRef:
-                  name: yelp-config
-                  key: MYSQL_DATABASE
-            - name: MYSQL_USER
-              valueFrom:
-                configMapKeyRef:
-                  name: yelp-config
-                  key: MYSQL_USER
-            - name: MYSQL_PASSWORD
-              valueFrom:
-                configMapKeyRef:
-                  name: yelp-config
-                  key: MYSQL_PASSWORD
+            - name: MONGO_INITDB_DATABASE
+              value: "yelp_prototype"
           volumeMounts:
-            - name: mysql-storage
-              mountPath: /var/lib/mysql
+            - name: mongodb-storage
+              mountPath: /data/db
           livenessProbe:
             exec:
               command:
-                - mysqladmin
-                - ping
-                - -h
-                - localhost
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
             initialDelaySeconds: 30
             periodSeconds: 10
           readinessProbe:
             exec:
               command:
-                - mysqladmin
-                - ping
-                - -h
-                - localhost
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
             initialDelaySeconds: 10
             periodSeconds: 5
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
       volumes:
-        - name: mysql-storage
+        - name: mongodb-storage
           emptyDir: {}
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: mysql-service
+  name: mongodb-service
   namespace: yelp
 spec:
   selector:
-    app: mysql
+    app: mongodb
   ports:
     - protocol: TCP
-      port: 3306
-      targetPort: 3306
+      port: 27017
+      targetPort: 27017
   type: ClusterIP
 
 ---

@@ -1,24 +1,18 @@
-from typing import Generator
-from sqlalchemy.orm import Session
+from bson import ObjectId
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import jwt
 from jwt import InvalidTokenError
-from database import SessionLocal
+from database import db
 from security import JWT_SECRET, JWT_ALGORITHM
-import models
 
-#db session dependency
-def get_db() -> Generator[Session, None, None]:
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-        
-#auth dependencies
+# Auth dependencies
 oauth2_user = OAuth2PasswordBearer(tokenUrl="/auth/users/login")
 oauth2_owner = OAuth2PasswordBearer(tokenUrl="/auth/owners/login")
+oauth2_user_or_owner = OAuth2PasswordBearer(
+    tokenUrl="/auth/users/login",
+    description="Accepts tokens from either /auth/users/login or /auth/owners/login"
+)
 
 def _decode_token(token: str):    
     try:
@@ -26,7 +20,7 @@ def _decode_token(token: str):
     except InvalidTokenError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token") from exc
 
-def get_current_user(token: str = Depends(oauth2_user), db: Session = Depends(get_db)):
+def get_current_user(token: str = Depends(oauth2_user)):
     payload = _decode_token(token)
     token_role = payload.get("role")
     if token_role != "user":
@@ -34,12 +28,15 @@ def get_current_user(token: str = Depends(oauth2_user), db: Session = Depends(ge
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
-    user = db.get(models.User, int(user_id))
+    
+    user = db.users.find_one({"_id": ObjectId(user_id)})
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    
+    user["id"] = user["_id"]
     return user
 
-def get_current_owner(token: str = Depends(oauth2_owner), db: Session = Depends(get_db)):
+def get_current_owner(token: str = Depends(oauth2_owner)):
     payload = _decode_token(token)
     token_role = payload.get("role")
     if token_role != "owner":
@@ -47,12 +44,15 @@ def get_current_owner(token: str = Depends(oauth2_owner), db: Session = Depends(
     owner_id = payload.get("sub")
     if not owner_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
-    owner = db.get(models.Owner, int(owner_id))
+    
+    owner = db.owners.find_one({"_id": ObjectId(owner_id)})
     if not owner:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Owner not found")
+    
+    owner["id"] = owner["_id"]
     return owner
 
-def get_current_user_or_owner(token: str = Depends(oauth2_user), db: Session = Depends(get_db)):
+def get_current_user_or_owner(token: str = Depends(oauth2_user_or_owner)):
     payload = _decode_token(token)
     token_role = payload.get("role")
     user_id = payload.get("sub")
@@ -61,14 +61,16 @@ def get_current_user_or_owner(token: str = Depends(oauth2_user), db: Session = D
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
     
     if token_role == "user":
-        user = db.get(models.User, int(user_id))
+        user = db.users.find_one({"_id": ObjectId(user_id)})
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        user["id"] = user["_id"]
         return user
     elif token_role == "owner":
-        owner = db.get(models.Owner, int(user_id))
+        owner = db.owners.find_one({"_id": ObjectId(user_id)})
         if not owner:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Owner not found")
+        owner["id"] = owner["_id"]
         return owner
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token role")
