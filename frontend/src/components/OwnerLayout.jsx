@@ -2,7 +2,8 @@ export default function OwnerLayout({ ownerToken, currentOwner, currentPath, nav
   // Tabs shown only when logged in as owner
   const ownerTabs = [
     { label: 'Profile', path: '/owner/profile' },
-    { label: 'Manage', path: '/owner/manage-restaurant' },
+    { label: 'Add a Restaurant', path: '/owner/manage-restaurant' },
+    { label: 'Edit Restaurants', path: '/owner/edit-restaurant' },
     { label: 'Claim', path: '/owner/claim' },
     { label: 'Reviews', path: '/owner/reviews' },
     { label: 'Analytics', path: '/owner/analytics' },

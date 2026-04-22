@@ -5,10 +5,6 @@ export default function ProfilePreferencesPage({
   profileForm,
   setProfileForm,
   countryOptions,
-  profilePhotoUploading,
-  setProfilePhotoFile,
-  uploadProfilePhoto,
-  profilePhotoFile,
   apiBaseUrl,
   saveProfile,
   profileSaving,
@@ -146,13 +142,6 @@ export default function ProfilePreferencesPage({
               <span>Profile photo URL</span>
               <input placeholder="https://..." value={profileForm.profile_photo} onChange={(event) => setProfileForm((prev) => ({ ...prev, profile_photo: event.target.value }))} disabled={!token} />
             </label>
-            <label className="field-block">
-              <span>Upload profile picture</span>
-              <input className="profile-file-input" type="file" accept="image/*" onChange={(event) => setProfilePhotoFile(event.target.files?.[0] ?? null)} disabled={!token || profilePhotoUploading} />
-            </label>
-            <button type="button" onClick={uploadProfilePhoto} disabled={!token || profilePhotoUploading || !profilePhotoFile}>
-              {profilePhotoUploading ? 'Uploading...' : 'Upload Photo'}
-            </button>
           </div>
           {profileForm.profile_photo && (
             <img
