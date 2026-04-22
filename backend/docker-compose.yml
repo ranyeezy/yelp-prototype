@@ -65,6 +65,7 @@ services:
       JWT_SECRET: yelpsecretkey
       KAFKA_BROKER: kafka:9092
       SKIP_DB_INIT: "true"
+      GROQ_API_KEY: ${GROQ_API_KEY}
     volumes:
       - ./services/user-service/uploads:/app/uploads
     networks:
@@ -168,6 +169,22 @@ services:
     environment:
       DATABASE_URL: mongodb://mongodb:27017/yelp_prototype
       KAFKA_BROKER: kafka:9092
+    networks:
+      - yelp-network
+    restart: on-failure
+
+  nginx:
+    image: nginx:alpine
+    container_name: yelp-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - user-service
+      - restaurant-service
+      - review-service
+      - owner-service
     networks:
       - yelp-network
     restart: on-failure
