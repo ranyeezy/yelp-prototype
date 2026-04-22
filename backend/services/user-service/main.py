@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 # Import routers
-from routers import auth, users, preferences
+from routers import auth, users, preferences, ai_assistant
 
 app = FastAPI(title="Yelp User Service")
 
@@ -42,6 +42,7 @@ def startup():
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(preferences.router)
+app.include_router(ai_assistant.router)
 
 @app.get("/")
 def health():

@@ -1,10 +1,11 @@
 from pathlib import Path
 import uuid
 import logging
-from bson import ObjectId
 
+from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, Query, HTTPException, status, UploadFile, File
 
+from database import db
 import crud_restaurants as crud
 from schemas import RestaurantOut, RestaurantCreate, RestaurantUpdate, RestaurantPhotoUploadOut
 from deps import get_current_user_or_owner
@@ -27,10 +28,12 @@ def upload_restaurant_photo(
     extension = Path(photo.filename).suffix.lower()
     if extension not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type")
+
     unique_name = f"restaurant_{current_user['id']}_{uuid.uuid4().hex}{extension}"
     destination = UPLOADS_DIR / unique_name
     with destination.open("wb") as output_file:
         output_file.write(photo.file.read())
+
     return RestaurantPhotoUploadOut(photo_url=f"/uploads/{unique_name}")
 
 
@@ -79,9 +82,19 @@ def list_restaurants(
     )
 
 
+@router.get("/claimed", response_model=list[str])
+def get_claimed_restaurant_ids():
+    claims = db.owner_restaurants.find({}, {"restaurant_id": 1})
+    return [str(claim["restaurant_id"]) for claim in claims]
+
+
 @router.get("/{restaurant_id}", response_model=RestaurantOut)
 def get_restaurant(restaurant_id: str):
-    restaurant = crud.get_restaurant(restaurant_id)
+    try:
+        restaurant = crud.get_restaurant(restaurant_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid restaurant id")
+
     if not restaurant:
         raise HTTPException(status_code=404, detail="Restaurant not found")
     return restaurant
@@ -93,30 +106,33 @@ def update_restaurant(
     payload: RestaurantUpdate,
     current_user=Depends(get_current_user_or_owner),
 ):
-    restaurant = crud.get_restaurant(restaurant_id)
+    try:
+        restaurant = crud.get_restaurant(restaurant_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid restaurant id")
+
     if not restaurant:
         raise HTTPException(status_code=404, detail="Restaurant not found")
-    
+
     if str(restaurant.get("listed_by_user_id")) != str(current_user["id"]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update your own restaurant",
         )
-    
+
     restaurant = crud.update_restaurant(restaurant_id, payload)
-    
-    # Publish Kafka event
+
     try:
         publish_restaurant_updated(
             restaurant_id=restaurant_id,
             name=restaurant["name"],
             cuisine_type=restaurant["cuisine_type"],
             address=restaurant["address"],
-            city=restaurant["city"]
+            city=restaurant["city"],
         )
     except Exception as e:
         logger.warning("Failed to publish restaurant.updated event: %s", e)
-    
+
     return restaurant
 
 
@@ -125,14 +141,18 @@ def delete_restaurant(
     restaurant_id: str,
     current_user=Depends(get_current_user_or_owner),
 ):
-    restaurant = crud.get_restaurant(restaurant_id)
+    try:
+        restaurant = crud.get_restaurant(restaurant_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid restaurant id")
+
     if not restaurant:
         raise HTTPException(status_code=404, detail="Restaurant not found")
-    
+
     if str(restaurant.get("listed_by_user_id")) != str(current_user["id"]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only delete your own restaurant",
         )
-    
+
     crud.delete_restaurant(restaurant_id)

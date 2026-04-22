@@ -15,25 +15,21 @@ def _attach_restaurant_photo_url(restaurant: dict):
 def _set_primary_photo(restaurant_id: str, photo_url: str | None):
     """Update or set primary photo for restaurant"""
     if not photo_url:
-        # Remove all photos
         db.restaurants.update_one(
             {"_id": ObjectId(restaurant_id)},
             {"$set": {"photos": []}}
         )
         return
 
-    # Get existing photos
     restaurant = db.restaurants.find_one({"_id": ObjectId(restaurant_id)})
-    existing_photos = restaurant.get("photos", [])
+    existing_photos = restaurant.get("photos", []) if restaurant else []
 
     if existing_photos:
-        # Replace first photo, remove others
         db.restaurants.update_one(
             {"_id": ObjectId(restaurant_id)},
             {"$set": {"photos": [photo_url]}}
         )
     else:
-        # Add new photo
         db.restaurants.update_one(
             {"_id": ObjectId(restaurant_id)},
             {"$push": {"photos": photo_url}}
@@ -52,6 +48,49 @@ def _ensure_claim(owner_id: str, restaurant_id: str):
             detail="You can only manage restaurants you have claimed",
         )
     return claim
+
+
+def _restaurant_id_variants(restaurant_id):
+    """Return both ObjectId and string forms for cross-service ID lookups."""
+    variants = []
+    if isinstance(restaurant_id, ObjectId):
+        variants.append(restaurant_id)
+        variants.append(str(restaurant_id))
+    else:
+        variants.append(restaurant_id)
+        try:
+            variants.append(ObjectId(str(restaurant_id)))
+        except Exception:
+            pass
+    return variants
+
+
+def _find_reviews_for_restaurant(restaurant_id):
+    """Find reviews whether restaurant_id is stored as ObjectId or string."""
+    return list(db.reviews.find({
+        "restaurant_id": {"$in": _restaurant_id_variants(restaurant_id)}
+    }))
+
+
+def _count_favorites_for_restaurants(restaurant_ids):
+    """Count favorites whether restaurant_id is stored as ObjectId or string."""
+    all_ids = []
+    for restaurant_id in restaurant_ids:
+        all_ids.extend(_restaurant_id_variants(restaurant_id))
+
+    return db.favorites.count_documents({
+        "restaurant_id": {"$in": all_ids}
+    })
+
+
+def _find_restaurant_by_any_id(restaurant_id):
+    """Find restaurant whether incoming id is ObjectId or string."""
+    for candidate in _restaurant_id_variants(restaurant_id):
+        if isinstance(candidate, ObjectId):
+            restaurant = db.restaurants.find_one({"_id": candidate})
+            if restaurant:
+                return restaurant
+    return None
 
 
 def claim_restaurant(owner_id: str, restaurant_id: str):
@@ -90,7 +129,7 @@ def claim_restaurant(owner_id: str, restaurant_id: str):
 def create_owner_restaurant(owner_id: str, payload):
     """Owner creates a new restaurant they automatically claim"""
     payload_data = payload.model_dump(exclude={"photo_url"})
-    
+
     restaurant_doc = {
         **payload_data,
         "listed_by_user_id": ObjectId(owner_id),
@@ -98,11 +137,10 @@ def create_owner_restaurant(owner_id: str, payload):
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
     }
-    
+
     result = db.restaurants.insert_one(restaurant_doc)
     restaurant_doc["id"] = result.inserted_id
 
-    # Auto-claim restaurant for owner
     claim_doc = {
         "owner_id": ObjectId(owner_id),
         "restaurant_id": result.inserted_id,
@@ -136,14 +174,10 @@ def list_claimed_restaurants(owner_id: str):
         if restaurant is None:
             continue
 
-        # Calculate rating stats
-        reviews = list(db.reviews.find({"restaurant_id": restaurant["_id"]}))
-        ratings = [r["rating"] for r in reviews]
-        
-        avg_rating = None
-        if ratings:
-            avg_rating = sum(ratings) / len(ratings)
-        
+        reviews = _find_reviews_for_restaurant(restaurant["_id"])
+        ratings = [float(r["rating"]) for r in reviews if r.get("rating") is not None]
+
+        avg_rating = round(sum(ratings) / len(ratings), 1) if ratings else None
         review_count = len(reviews)
 
         summaries.append({
@@ -166,11 +200,13 @@ def get_owner_dashboard(owner_id: str):
     total_reviews = sum(item["review_count"] for item in restaurants)
 
     rating_values = [item["avg_rating"] for item in restaurants if item["avg_rating"] is not None]
-    avg_rating = None
-    if rating_values:
-        avg_rating = round(sum(rating_values) / len(rating_values), 2)
+    avg_rating = round(sum(rating_values) / len(rating_values), 2) if rating_values else None
 
     restaurant_ids = [item["id"] for item in restaurants]
+    all_restaurant_ids = []
+    for restaurant_id in restaurant_ids:
+        all_restaurant_ids.extend(_restaurant_id_variants(restaurant_id))
+
     ratings_distribution = {str(value): 0 for value in range(1, 6)}
     positive_reviews = 0
     neutral_reviews = 0
@@ -178,17 +214,18 @@ def get_owner_dashboard(owner_id: str):
     total_favorites = 0
     recent_reviews = []
 
-    if restaurant_ids:
-        # Count favorites
-        total_favorites = db.favorites.count_documents({
-            "restaurant_id": {"$in": restaurant_ids}
-        })
+    if all_restaurant_ids:
+        total_favorites = _count_favorites_for_restaurants(restaurant_ids)
 
-        # Analyze ratings distribution
-        reviews = list(db.reviews.find({"restaurant_id": {"$in": restaurant_ids}}))
-        
+        reviews = list(db.reviews.find({
+            "restaurant_id": {"$in": all_restaurant_ids}
+        }))
+
         for review in reviews:
-            rating_value = review["rating"]
+            rating_value = review.get("rating")
+            if rating_value is None:
+                continue
+
             normalized_rating = int(rating_value)
             if str(normalized_rating) in ratings_distribution:
                 ratings_distribution[str(normalized_rating)] += 1
@@ -200,22 +237,21 @@ def get_owner_dashboard(owner_id: str):
             else:
                 neutral_reviews += 1
 
-        # Get recent reviews
         recent_review_docs = list(
-            db.reviews.find({"restaurant_id": {"$in": restaurant_ids}})
+            db.reviews.find({"restaurant_id": {"$in": all_restaurant_ids}})
             .sort("created_at", -1)
             .limit(10)
         )
-        
+
         for review in recent_review_docs:
-            restaurant = db.restaurants.find_one({"_id": review["restaurant_id"]})
+            restaurant = _find_restaurant_by_any_id(review["restaurant_id"])
             if restaurant:
                 recent_reviews.append({
                     "review_id": review["_id"],
                     "restaurant_id": review["restaurant_id"],
                     "restaurant_name": restaurant["name"],
-                    "rating": review["rating"],
-                    "comment": review["comment"],
+                    "rating": review.get("rating"),
+                    "comment": review.get("comment"),
                     "created_at": review["created_at"],
                 })
 
@@ -255,10 +291,10 @@ def get_claimed_restaurant(owner_id: str, restaurant_id: str):
 
 def update_claimed_restaurant(owner_id: str, restaurant_id: str, payload):
     """Update a claimed restaurant"""
-    restaurant = get_claimed_restaurant(owner_id, restaurant_id)
+    get_claimed_restaurant(owner_id, restaurant_id)
     data = payload.model_dump(exclude_unset=True, exclude={"photo_url"})
     data["updated_at"] = datetime.utcnow()
-    
+
     db.restaurants.update_one(
         {"_id": ObjectId(restaurant_id)},
         {"$set": data}
@@ -275,10 +311,11 @@ def update_claimed_restaurant(owner_id: str, restaurant_id: str, payload):
 def list_claimed_restaurant_reviews(owner_id: str, restaurant_id: str):
     """List reviews for a claimed restaurant"""
     _ensure_claim(owner_id, restaurant_id)
-    
+
     reviews = list(
-        db.reviews.find({"restaurant_id": ObjectId(restaurant_id)})
-        .sort("created_at", -1)
+        db.reviews.find({
+            "restaurant_id": {"$in": _restaurant_id_variants(restaurant_id)}
+        }).sort("created_at", -1)
     )
 
     result = []
@@ -286,17 +323,17 @@ def list_claimed_restaurant_reviews(owner_id: str, restaurant_id: str):
         user = db.users.find_one({"_id": review["user_id"]})
         if user is None:
             continue
-        
+
         result.append({
             "id": review["_id"],
             "user_id": review["user_id"],
             "user_name": user["name"],
             "restaurant_id": review["restaurant_id"],
-            "rating": review["rating"],
-            "comment": review["comment"],
-            "photo_url": review["photo_url"],
+            "rating": review.get("rating"),
+            "comment": review.get("comment"),
+            "photo_url": review.get("photo_url"),
             "created_at": review["created_at"],
             "updated_at": review["updated_at"],
         })
-    
+
     return result

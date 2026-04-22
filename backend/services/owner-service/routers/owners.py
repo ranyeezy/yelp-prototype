@@ -4,7 +4,7 @@ from bson import ObjectId
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from deps import get_current_owner
-from schemas import RestaurantPhotoUploadOut, OwnerOut, OwnerUpdate, OwnerRestaurantSummaryOut, OwnerClaimRestaurantOut, OwnerDashboardOut
+from schemas import RestaurantPhotoUploadOut, OwnerOut, OwnerUpdate, OwnerRestaurantSummaryOut, OwnerClaimRestaurantOut, OwnerDashboardOut, RestaurantCreate, RestaurantOut, OwnerRestaurantReviewOut
 from database import db
 import crud_users_owners as crud
 import crud_owner_restaurants as owner_crud
@@ -57,6 +57,39 @@ def get_my_claimed_restaurants(
 ):
     owner_id = str(current_owner["id"])
     return owner_crud.list_claimed_restaurants(owner_id)
+
+@router.post("/restaurants", response_model=RestaurantOut, status_code=202)
+def create_owner_restaurant(
+    payload: RestaurantCreate,
+    current_owner=Depends(get_current_owner),
+):
+    owner_id = str(current_owner["id"])
+    return owner_crud.create_owner_restaurant(owner_id, payload)
+
+@router.get("/restaurants/{restaurant_id}", response_model=RestaurantOut)
+def get_owned_restaurant(
+    restaurant_id: str,
+    current_owner=Depends(get_current_owner),
+):
+    owner_id = str(current_owner["id"])
+    return owner_crud.get_claimed_restaurant(owner_id, restaurant_id)
+
+@router.put("/restaurants/{restaurant_id}", response_model=RestaurantOut, status_code=202)
+def update_owned_restaurant(
+    restaurant_id: str,
+    payload: RestaurantCreate,
+    current_owner=Depends(get_current_owner),
+):
+    owner_id = str(current_owner["id"])
+    return owner_crud.update_claimed_restaurant(owner_id, restaurant_id, payload)
+
+@router.get("/restaurants/{restaurant_id}/reviews", response_model=list[OwnerRestaurantReviewOut])
+def get_owned_restaurant_reviews(
+    restaurant_id: str,
+    current_owner=Depends(get_current_owner),
+):
+    owner_id = str(current_owner["id"])
+    return owner_crud.list_claimed_restaurant_reviews(owner_id, restaurant_id)
 
 @router.post("/restaurants/{restaurant_id}/claim", response_model=OwnerClaimRestaurantOut)
 def claim_restaurant(
