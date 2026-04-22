@@ -39,15 +39,17 @@ def get_user_preferences(user_id: str) -> dict:
         if not user:
             return {}
         
-        prefs = db.preferences.find_one({"user_id": ObjectId(user_id)})
+        prefs = db.user_preferences.find_one({"user_id": ObjectId(user_id)})
         if not prefs:
             return {"cuisine_types": [], "price_range": "any"}
-        
+
         return {
-            "cuisine_types": prefs.get("cuisine_types", []),
-            "price_range": prefs.get("price_range", "any"),
-            "dietary_restrictions": prefs.get("dietary_restrictions", []),
-            "distance_preference": prefs.get("distance_preference", "any"),
+            "cuisine_types": prefs.get("cuisines", ""),
+            "price_range": f"{prefs.get('price_min', '')}-{prefs.get('price_max', '')}".strip("-") or "any",
+            "dietary_restrictions": prefs.get("dietary_needs", ""),
+            "distance_preference": prefs.get("search_radius", "any"),
+            "preferred_locations": prefs.get("preferred_locations", ""),
+            "ambiance": prefs.get("ambiance", ""),
         }
     except Exception as e:
         logger.error(f"Error fetching user preferences: {e}")
@@ -150,15 +152,18 @@ def recommend_restaurants(
         
         # Build system prompt
         system_prompt = f"""You are a helpful restaurant recommendation assistant.
-        
+
 User Preferences:
-- Cuisine Types: {', '.join(user_prefs.get('cuisine_types', ['Any'])) or 'Any'}
-- Price Range: {user_prefs.get('price_range', 'Any')}
-- Dietary Restrictions: {', '.join(user_prefs.get('dietary_restrictions', ['None'])) or 'None'}
+- Cuisine Types: {user_prefs.get('cuisine_types') or 'Any'}
+- Price Range: {user_prefs.get('price_range') or 'Any'}
+- Dietary Restrictions: {user_prefs.get('dietary_restrictions') or 'None'}
+- Preferred Locations: {user_prefs.get('preferred_locations') or 'Any'}
+- Ambiance: {user_prefs.get('ambiance') or 'Any'}
 
 {restaurant_context}
 
 When recommending restaurants, mention their names and IDs from the list above.
+Respect the user's dietary restrictions and ambiance preferences strongly.
 Be conversational and helpful. If you recommend restaurants, include their exact IDs."""
         
         # Initialize Groq LLM

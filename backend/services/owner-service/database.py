@@ -32,6 +32,9 @@ def init_db():
     
     # Favorites collection indexes
     db.favorites.create_index([("user_id", 1), ("restaurant_id", 1)], unique=True)
+
+    # User preferences collection indexes
+    db.user_preferences.create_index("user_id", unique=True)
     
     print("MongoDB indexes created successfully")
 
