@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useDispatch, useSelector } from 'react-redux'
+import api from './api/axios'
 import './App.css'
 import ExploreSearchPage from './pages/public/ExploreSearchPage'
 import RestaurantDetailsPage from './pages/public/RestaurantDetailsPage'
@@ -15,10 +17,19 @@ import OwnerLoginPage from './pages/owner/OwnerLoginPage'
 import OwnerSignupPage from './pages/owner/OwnerSignupPage'
 import OwnerProfilePage from './pages/owner/OwnerProfilePage'
 import OwnerManageRestaurantPage from './pages/owner/OwnerManageRestaurantPage'
+import OwnerEditRestaurantPage from './pages/owner/OwnerEditRestaurantPage'
 import OwnerClaimPage from './pages/owner/OwnerClaimPage'
 import OwnerReviewsDashboardPage from './pages/owner/OwnerReviewsDashboardPage'
 import OwnerAnalyticsPage from './pages/owner/OwnerAnalyticsPage'
 import OwnerLayout from './components/OwnerLayout'
+import { loginUser, signupUser, loginOwner, signupOwner, fetchCurrentUser, fetchCurrentOwner, clearUserSession, clearOwnerSession, setOwnerMessage } from './store/slices/authSlice'
+import { fetchRestaurants, fetchGloballyClaimedIds } from './store/slices/restaurantsSlice'
+import { fetchFavorites, toggleFavorite as toggleFavoriteThunk } from './store/slices/favoritesSlice'
+import { fetchReviewsForRestaurant, fetchMyReviewHistory } from './store/slices/reviewsSlice'
+import * as authSelectors from './store/selectors/authSelectors'
+import * as restaurantSelectors from './store/selectors/restaurantSelectors'
+import * as reviewSelectors from './store/selectors/reviewSelectors'
+import * as favoriteSelectors from './store/selectors/favoriteSelectors'
 
 const emptyProfileEditorForm = {
   name: '',
@@ -45,12 +56,21 @@ const emptyPreferencesEditorForm = {
 }
 
 function App() {
-  const [apiBaseUrl] = useState('http://127.0.0.1:8000')
+  const apiBaseUrl = import.meta.env.VITE_API_URL || ''
+  const dispatch = useDispatch()
+
+  // Redux selectors for auth
+  const token = useSelector(authSelectors.selectToken)
+  const currentUser = useSelector(authSelectors.selectCurrentUser)
+  const authMessage = useSelector(authSelectors.selectAuthMessage)
+  const authLoading = useSelector(authSelectors.selectAuthLoading)
+  const ownerToken = useSelector(authSelectors.selectOwnerToken)
+  const currentOwner = useSelector(authSelectors.selectCurrentOwner)
+  const ownerMessage = useSelector(authSelectors.selectOwnerMessage)
+  const ownerAuthLoading = useSelector(authSelectors.selectOwnerAuthLoading)
+
+  // Local form state (component-specific, no need for Redux)
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' })
-  const [token, setToken] = useState(() => localStorage.getItem('authToken') ?? '')
-  const [currentUser, setCurrentUser] = useState(null)
-  const [authMessage, setAuthMessage] = useState('')
-  const [authLoading, setAuthLoading] = useState(false)
   const [profileForm, setProfileForm] = useState(emptyProfileEditorForm)
   const [profileMessage, setProfileMessage] = useState('')
   const [profileSaving, setProfileSaving] = useState(false)
@@ -59,10 +79,6 @@ function App() {
 
   const [ownerAuthMode, setOwnerAuthMode] = useState('login')
   const [ownerForm, setOwnerForm] = useState({ name: '', email: '', password: '', restaurant_location: '' })
-  const [ownerToken, setOwnerToken] = useState(() => localStorage.getItem('ownerAuthToken') ?? '')
-  const [currentOwner, setCurrentOwner] = useState(null)
-  const [ownerMessage, setOwnerMessage] = useState('')
-  const [ownerAuthLoading, setOwnerAuthLoading] = useState(false)
   const [ownerProfileForm, setOwnerProfileForm] = useState({ name: '', email: '', restaurant_location: '' })
   const [ownerProfileSaving, setOwnerProfileSaving] = useState(false)
   const [ownerClaimRestaurantId, setOwnerClaimRestaurantId] = useState('')
@@ -105,18 +121,21 @@ function App() {
   const [ownerNewRestaurantPhotoFile, setOwnerNewRestaurantPhotoFile] = useState(null)
   const [ownerEditRestaurantPhotoFile, setOwnerEditRestaurantPhotoFile] = useState(null)
   const [ownerRestaurantReviews, setOwnerRestaurantReviews] = useState([])
-  const [globallyClaimedRestaurantIds, setGloballyClaimedRestaurantIds] = useState(new Set())
 
+  // Redux selectors for restaurants
+  const restaurants = useSelector(restaurantSelectors.selectRestaurantsList)
+  const restaurantsMessage = useSelector(restaurantSelectors.selectRestaurantsMessage)
+  const loadingRestaurants = useSelector(restaurantSelectors.selectRestaurantsLoading)
+  const globallyClaimedRestaurantIdsArray = useSelector(restaurantSelectors.selectGloballyClaimedRestaurantIds)
+  const globallyClaimedRestaurantIds = useMemo(() => new Set(globallyClaimedRestaurantIdsArray), [globallyClaimedRestaurantIdsArray])
+  const myListings = useSelector((state) => restaurantSelectors.selectMyListings(state, currentUser?.id))
+
+  // Local form state for restaurants
   const [restaurantQuery, setRestaurantQuery] = useState({ keyword: '', city: '', cuisine_type: '' })
-  const [restaurants, setRestaurants] = useState([])
-  const [restaurantsMessage, setRestaurantsMessage] = useState('')
-  const [loadingRestaurants, setLoadingRestaurants] = useState(false)
-  const [myListings, setMyListings] = useState([])
   const [listingMessage, setListingMessage] = useState('')
   const [listingSaving, setListingSaving] = useState(false)
   const [listingPhotoFile, setListingPhotoFile] = useState(null)
   const [listingPhotoUploading, setListingPhotoUploading] = useState(false)
-  const [listingActionId, setListingActionId] = useState(null)
   const [listingForm, setListingForm] = useState({
     name: '',
     cuisine_type: '',
@@ -133,10 +152,12 @@ function App() {
   const [editingListingId, setEditingListingId] = useState(null)
   const [editingListingForm, setEditingListingForm] = useState({ description: '', price_tier: '' })
 
-  const [favoriteRestaurantIds, setFavoriteRestaurantIds] = useState(new Set())
-  const [favoriteRestaurants, setFavoriteRestaurants] = useState([])
-  const [favoritesMessage, setFavoritesMessage] = useState('')
-  const [favoriteActionId, setFavoriteActionId] = useState(null)
+  // Redux selectors for favorites
+  const favoriteRestaurantIdsArray = useSelector(favoriteSelectors.selectFavoriteRestaurantIds)
+  const favoriteRestaurantIds = useMemo(() => new Set(favoriteRestaurantIdsArray), [favoriteRestaurantIdsArray])
+  const favoriteRestaurants = useSelector(favoriteSelectors.selectFavoriteRestaurants)
+  const favoritesMessage = useSelector(favoriteSelectors.selectFavoritesMessage)
+  const favoriteActionId = useSelector(favoriteSelectors.selectFavoriteActionId)
 
   const [preferencesForm, setPreferencesForm] = useState({
     ...emptyPreferencesEditorForm,
@@ -180,14 +201,9 @@ function App() {
   )
 
   const apiRequest = useCallback(async (path, options = {}) => {
-    const { authToken, ...fetchOptions } = options
-    const isFormData = fetchOptions.body instanceof FormData
-    const headers = {
-      ...(fetchOptions.headers ?? {}),
-    }
-    if (!isFormData && !headers['Content-Type']) {
-      headers['Content-Type'] = 'application/json'
-    }
+    const { authToken, method = 'GET', body, headers: extraHeaders = {} } = options
+
+    const headers = { ...extraHeaders }
 
     const hasAuthTokenOverride = Object.prototype.hasOwnProperty.call(options, 'authToken')
     const resolvedToken = hasAuthTokenOverride ? authToken : token
@@ -195,42 +211,38 @@ function App() {
       headers.Authorization = `Bearer ${resolvedToken}`
     }
 
-    const response = await fetch(`${apiBaseUrl}${path}`, {
-      ...fetchOptions,
-      headers,
-    })
-
-    if (response.status === 204) {
-      return null
+    let data
+    if (body instanceof FormData || body instanceof URLSearchParams) {
+      data = body
+    } else if (typeof body === 'string') {
+      try {
+        data = JSON.parse(body)
+        if (!headers['Content-Type']) headers['Content-Type'] = 'application/json'
+      } catch {
+        data = body
+      }
     }
 
-    const data = await response.json().catch(() => null)
-    if (!response.ok) {
-      const detail = data?.detail ?? 'Request failed'
+    try {
+      const response = await api({ method, url: path, headers, data })
+      if (response.status === 204) return null
+      return response.data
+    } catch (error) {
+      if (error.response?.status === 204) return null
+      const detail = error.response?.data?.detail ?? error.message ?? 'Request failed'
       throw new Error(typeof detail === 'string' ? detail : 'Request failed')
     }
-    return data
-  }, [apiBaseUrl, token])
+  }, [token])
 
   const loadCurrentUser = useCallback(async () => {
     if (!token) return
-    try {
-      const user = await apiRequest('/users/me')
-      setCurrentUser(user)
-    } catch {
-      setCurrentUser(null)
-    }
-  }, [token, apiRequest])
+    dispatch(fetchCurrentUser())
+  }, [token, dispatch])
 
   const loadCurrentOwner = useCallback(async () => {
     if (!ownerToken) return
-    try {
-      const owner = await apiRequest('/owners/me', { authToken: ownerToken })
-      setCurrentOwner(owner)
-    } catch {
-      setCurrentOwner(null)
-    }
-  }, [ownerToken, apiRequest])
+    dispatch(fetchCurrentOwner())
+  }, [ownerToken, dispatch])
 
   const loadOwnerData = useCallback(async () => {
     if (!ownerToken) {
@@ -242,7 +254,7 @@ function App() {
 
     try {
       const [restaurantsData, dashboardData] = await Promise.all([
-        apiRequest('/owners/restaurants', { authToken: ownerToken }),
+        apiRequest('/owners/restaurants/claimed', { authToken: ownerToken }),
         apiRequest('/owners/dashboard', { authToken: ownerToken }),
       ])
       setOwnerRestaurants(restaurantsData)
@@ -304,50 +316,18 @@ function App() {
     }
   }, [ownerToken, selectedOwnerRestaurantId, apiRequest])
 
-  const loadGloballyClaimedIds = useCallback(async () => {
-    try {
-      const data = await apiRequest('/owners/claimed-restaurant-ids', { method: 'GET', authToken: '' })
-      setGloballyClaimedRestaurantIds(new Set(data))
-    } catch {
-      setGloballyClaimedRestaurantIds(new Set())
-    }
-  }, [apiRequest])
+  const loadGloballyClaimedIds = useCallback(() => {
+    dispatch(fetchGloballyClaimedIds())
+  }, [dispatch])
 
-  const loadRestaurants = useCallback(async () => {
-    setLoadingRestaurants(true)
-    setRestaurantsMessage('')
-    try {
-      const params = new URLSearchParams()
-      Object.entries(restaurantQuery).forEach(([key, value]) => {
-        if (value.trim()) params.append(key, value.trim())
-      })
-      const query = params.toString()
-      const data = await apiRequest(`/restaurants${query ? `?${query}` : ''}`, { method: 'GET' })
-      setRestaurants(data)
-      if (data.length === 0) setRestaurantsMessage('No restaurants found for current filters.')
-    } catch (error) {
-      setRestaurants([])
-      setRestaurantsMessage(error.message)
-    } finally {
-      setLoadingRestaurants(false)
-    }
-  }, [restaurantQuery, apiRequest])
+  const loadRestaurants = useCallback(() => {
+    dispatch(fetchRestaurants(restaurantQuery))
+  }, [dispatch, restaurantQuery])
 
-  const loadFavorites = useCallback(async () => {
-    if (!token) {
-      setFavoriteRestaurantIds(new Set())
-      setFavoriteRestaurants([])
-      return
-    }
-    try {
-      const data = await apiRequest('/favorites/me')
-      setFavoriteRestaurantIds(new Set(data.map((item) => item.restaurant.id)))
-      setFavoriteRestaurants(data.map((item) => item.restaurant))
-    } catch {
-      setFavoriteRestaurantIds(new Set())
-      setFavoriteRestaurants([])
-    }
-  }, [token, apiRequest])
+  const loadFavorites = useCallback(() => {
+    if (!token) return
+    dispatch(fetchFavorites())
+  }, [token, dispatch])
 
   const loadPreferences = useCallback(async () => {
     if (!token) {
@@ -365,18 +345,12 @@ function App() {
     }
   }, [token, apiRequest])
 
-  const loadMyListings = useCallback(async () => {
+  const loadMyListings = useCallback(() => {
     if (!token || !currentUser) {
-      setMyListings([])
       return
     }
-    try {
-      const allRestaurants = await apiRequest('/restaurants', { method: 'GET' })
-      setMyListings(allRestaurants.filter((restaurant) => restaurant.listed_by_user_id === currentUser.id))
-    } catch {
-      setMyListings([])
-    }
-  }, [token, currentUser, apiRequest])
+    loadRestaurants()
+  }, [token, currentUser, loadRestaurants])
 
   const loadReviews = useCallback(async (restaurantId) => {
     if (!restaurantId) {
@@ -403,22 +377,6 @@ function App() {
       setMyReviewHistory([])
     }
   }, [token, apiRequest])
-
-  useEffect(() => {
-    if (token) {
-      localStorage.setItem('authToken', token)
-    } else {
-      localStorage.removeItem('authToken')
-    }
-  }, [token])
-
-  useEffect(() => {
-    if (ownerToken) {
-      localStorage.setItem('ownerAuthToken', ownerToken)
-    } else {
-      localStorage.removeItem('ownerAuthToken')
-    }
-  }, [ownerToken])
 
   useEffect(() => {
     loadRestaurants()
@@ -477,83 +435,27 @@ function App() {
 
   const onUserSignupSubmit = async (event) => {
     event.preventDefault()
-    setAuthMessage('')
-    setAuthLoading(true)
-    try {
-      await apiRequest('/auth/users/signup', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: authForm.name,
-          email: authForm.email,
-          password: authForm.password,
-        }),
-        headers: {},
-      })
-      setAuthMessage('Account created successfully. Please use User Login to sign in.')
+    const result = await dispatch(signupUser(authForm))
+    if (signupUser.fulfilled.match(result)) {
       setAuthForm((prev) => ({ ...prev, password: '' }))
       navigate('/login')
-    } catch (error) {
-      setAuthMessage(error.message)
-    } finally {
-      setAuthLoading(false)
     }
   }
 
   const onUserLoginSubmit = async (event) => {
     event.preventDefault()
-    setAuthMessage('')
-    setAuthLoading(true)
-    try {
-      const loginFormData = new URLSearchParams()
-      loginFormData.append('username', authForm.email)
-      loginFormData.append('password', authForm.password)
-      const loginData = await apiRequest('/auth/users/login', {
-        method: 'POST',
-        body: loginFormData,
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      })
-      const userData = await apiRequest('/users/me', {
-        method: 'GET',
-        authToken: loginData.access_token,
-      })
-      setToken(loginData.access_token)
-      setCurrentUser(userData)
-      // Clear owner session — only one role can be active at a time
-      setOwnerToken('')
-      setCurrentOwner(null)
-      setOwnerRestaurants([])
-      setOwnerDashboard(null)
-      setSelectedOwnerRestaurantId('')
-      setOwnerRestaurantReviews([])
-      setAuthMessage('Logged in successfully.')
+    const result = await dispatch(loginUser({ email: authForm.email, password: authForm.password }))
+    if (loginUser.fulfilled.match(result)) {
+      setAuthForm((prev) => ({ ...prev, password: '' }))
       navigate('/restaurants')
-    } catch (error) {
-      setAuthMessage(error.message)
-    } finally {
-      setAuthLoading(false)
     }
   }
 
   const toggleFavorite = async (restaurantId) => {
-    setFavoritesMessage('')
     if (!token) {
-      setFavoritesMessage('Please login to manage favorites.')
       return
     }
-
-    setFavoriteActionId(restaurantId)
-    try {
-      if (favoriteRestaurantIds.has(restaurantId)) {
-        await apiRequest(`/favorites/${restaurantId}`, { method: 'DELETE' })
-      } else {
-        await apiRequest(`/favorites/${restaurantId}`, { method: 'POST', headers: {} })
-      }
-      await loadFavorites()
-    } catch (error) {
-      setFavoritesMessage(error.message)
-    } finally {
-      setFavoriteActionId(null)
-    }
+    dispatch(toggleFavoriteThunk(restaurantId))
   }
 
   const saveProfile = async (event) => {
@@ -595,12 +497,12 @@ function App() {
 
     setProfileSaving(true)
     try {
-      const updated = await apiRequest('/users/me', {
+      await apiRequest('/users/me', {
         method: 'PUT',
         body: JSON.stringify(payload),
         headers: {},
       })
-      setCurrentUser(updated)
+      dispatch(fetchCurrentUser())
       setProfileForm(emptyProfileEditorForm)
       setProfileMessage('Profile updated successfully.')
     } catch (error) {
@@ -626,12 +528,12 @@ function App() {
       const formData = new FormData()
       formData.append('photo', profilePhotoFile)
 
-      const updated = await apiRequest('/users/me/profile-photo', {
+      await apiRequest('/users/me/profile-photo', {
         method: 'POST',
         body: formData,
         headers: {},
       })
-      setCurrentUser(updated)
+      dispatch(fetchCurrentUser())
       setProfilePhotoFile(null)
       setProfileMessage('Profile photo uploaded successfully.')
     } catch (error) {
@@ -670,6 +572,7 @@ function App() {
       setReviewForm({ rating: 5, comment: '' })
       setReviewPhotoFile(null)
       setReviewMessage('Review added successfully.')
+      await new Promise(resolve => setTimeout(resolve, 1500))
       await loadReviews(activeRestaurantId)
       await loadMyReviewHistory()
     } catch (error) {
@@ -723,6 +626,7 @@ function App() {
       })
       setEditingReviewId(null)
       setReviewMessage('Review updated successfully.')
+      await new Promise(resolve => setTimeout(resolve, 1500))
       await loadReviews(activeRestaurantId)
       await loadMyReviewHistory()
     } catch (error) {
@@ -739,6 +643,7 @@ function App() {
       await apiRequest(`/reviews/${reviewId}`, { method: 'DELETE' })
       setEditingReviewId(null)
       setReviewMessage('Review deleted successfully.')
+      await new Promise(resolve => setTimeout(resolve, 1500))
       await loadReviews(activeRestaurantId)
       await loadMyReviewHistory()
     } catch (error) {
@@ -778,6 +683,7 @@ function App() {
     try {
       await apiRequest(`/reviews/${reviewId}`, { method: 'DELETE' })
       setReviewMessage('Review deleted successfully.')
+      await new Promise(resolve => setTimeout(resolve, 1500))
       await loadMyReviewHistory()
       if (activeRestaurantId) {
         await loadReviews(activeRestaurantId)
@@ -897,6 +803,7 @@ function App() {
       })
       setListingPhotoFile(null)
       setListingMessage('Restaurant listed successfully.')
+      await new Promise(resolve => setTimeout(resolve, 1500))
       await loadRestaurants()
       await loadMyListings()
     } catch (error) {
@@ -995,73 +902,48 @@ function App() {
   }
 
   const logout = () => {
-    setToken('')
-    setCurrentUser(null)
-    setMyReviewHistory([])
-    setAuthMessage('Logged out.')
+    dispatch(clearUserSession())
     navigate('/login')
   }
 
   const onOwnerAuthSubmit = async (event) => {
     event.preventDefault()
-    setOwnerMessage('')
-    setOwnerAuthLoading(true)
     try {
       if (ownerAuthMode === 'signup') {
-        await apiRequest('/auth/owners/signup', {
-          method: 'POST',
-          body: JSON.stringify(ownerForm),
-          headers: {},
-          authToken: '',
-        })
-
-        setOwnerMessage('Owner account created successfully. Please login now.')
-        setOwnerForm((prev) => ({
-          ...prev,
-          name: '',
-          restaurant_location: '',
-          password: '',
-        }))
-        navigate('/owner/login')
+        const result = await dispatch(signupOwner(ownerForm))
+        if (signupOwner.fulfilled.match(result)) {
+          setOwnerForm((prev) => ({
+            ...prev,
+            name: '',
+            restaurant_location: '',
+            password: '',
+          }))
+          navigate('/owner/login')
+        }
         return
       }
 
-      const loginData = await apiRequest('/auth/owners/login', {
-        method: 'POST',
-        body: JSON.stringify({
-          email: ownerForm.email,
-          password: ownerForm.password,
-        }),
-        headers: {},
-        authToken: '',
-      })
-
-      setOwnerToken(loginData.access_token)
-      // Clear user session — only one role can be active at a time
-      setToken('')
-      setCurrentUser(null)
-      setMyReviewHistory([])
-      setOwnerMessage('Owner logged in successfully.')
-      navigate('/owner/profile')
+      const result = await dispatch(loginOwner({ email: ownerForm.email, password: ownerForm.password }))
+      if (loginOwner.fulfilled.match(result)) {
+        navigate('/owner/profile')
+      }
     } catch (error) {
-      setOwnerMessage(error.message)
-    } finally {
-      setOwnerAuthLoading(false)
+      // Error handling is done via Redux state
     }
   }
 
   const claimRestaurantForOwner = async (restaurantId) => {
-    setOwnerMessage('')
+    dispatch(setOwnerMessage(''))
     if (!ownerToken) {
-      setOwnerMessage('Owner login required to claim restaurants.')
+      dispatch(setOwnerMessage('Owner login required to claim restaurants.'))
       return
     }
-    if (!Number.isInteger(restaurantId) || restaurantId <= 0) {
-      setOwnerMessage('Please enter a valid restaurant ID.')
+    if (!restaurantId || typeof restaurantId !== 'string' || restaurantId.trim() === '') {
+      dispatch(setOwnerMessage('Please enter a valid restaurant ID.'))
       return
     }
     if (ownerClaimedRestaurantIds.has(restaurantId)) {
-      setOwnerMessage('You already claimed this restaurant.')
+      dispatch(setOwnerMessage('You already claimed this restaurant.'))
       return
     }
     try {
@@ -1070,17 +952,16 @@ function App() {
         headers: {},
         authToken: ownerToken,
       })
-      setOwnerMessage('Restaurant claimed successfully.')
+      dispatch(setOwnerMessage('Restaurant claimed successfully.'))
       setOwnerClaimRestaurantId('')
       await Promise.all([loadOwnerData(), loadRestaurants(), loadGloballyClaimedIds()])
     } catch (error) {
-      setOwnerMessage(error.message)
+      dispatch(setOwnerMessage(error.message))
     }
   }
 
   const ownerLogout = () => {
-    setOwnerToken('')
-    setCurrentOwner(null)
+    dispatch(clearOwnerSession())
     setOwnerRestaurants([])
     setOwnerDashboard(null)
     setSelectedOwnerRestaurantId('')
@@ -1188,6 +1069,7 @@ function App() {
       setSelectedOwnerRestaurantId(String(created.id))
       setOwnerMessage('Restaurant posted and claimed successfully.')
 
+      await new Promise(resolve => setTimeout(resolve, 1500))
       await Promise.all([loadOwnerData(), loadRestaurants(), loadGloballyClaimedIds()])
     } catch (error) {
       setOwnerMessage(error.message)
@@ -1233,6 +1115,7 @@ function App() {
         headers: {},
         body: JSON.stringify(payload),
       })
+      await new Promise(resolve => setTimeout(resolve, 1500))
       await Promise.all([
         loadOwnerData(),
         loadOwnerRestaurantDetails(),
@@ -1257,7 +1140,7 @@ function App() {
 
     setOwnerProfileSaving(true)
     try {
-      const updated = await apiRequest('/owners/me', {
+      await apiRequest('/owners/me', {
         method: 'PUT',
         body: JSON.stringify({
           name: ownerProfileForm.name,
@@ -1267,8 +1150,8 @@ function App() {
         headers: {},
         authToken: ownerToken,
       })
-      setCurrentOwner(updated)
-      setOwnerMessage('Owner profile updated successfully.')
+      dispatch(fetchCurrentOwner())
+      dispatch(setOwnerMessage('Owner profile updated successfully.'))
     } catch (error) {
       setOwnerMessage(error.message)
     } finally {
@@ -1435,8 +1318,8 @@ function App() {
   }, [heroTiles.length])
 
   const currentPath = location.pathname
-  const restaurantDetailMatch = currentPath.match(/^\/restaurants\/(\d+)$/)
-  const routeRestaurantId = restaurantDetailMatch ? Number(restaurantDetailMatch[1]) : null
+  const restaurantDetailMatch = currentPath.match(/^\/restaurants\/([a-f0-9]{24}|\d+)$/)
+  const routeRestaurantId = restaurantDetailMatch ? restaurantDetailMatch[1] : null
   const isRestaurantsRoute = currentPath === '/' || currentPath === '/restaurants' || Boolean(restaurantDetailMatch)
   const knownPaths = useMemo(() => new Set([
     '/',
@@ -1452,6 +1335,7 @@ function App() {
     '/owner/signup',
     '/owner/profile',
     '/owner/manage-restaurant',
+    '/owner/edit-restaurant',
     '/owner/claim',
     '/owner/reviews',
     '/owner/analytics',
@@ -1466,6 +1350,7 @@ function App() {
   const ownerProtectedPaths = useMemo(() => new Set([
     '/owner/profile',
     '/owner/manage-restaurant',
+    '/owner/edit-restaurant',
     '/owner/claim',
     '/owner/reviews',
     '/owner/analytics',
@@ -1511,13 +1396,11 @@ function App() {
 
   useEffect(() => {
     if (userProtectedPaths.has(currentPath) && !token) {
-      setAuthMessage('Please login to access this page.')
       navigate('/login', { replace: true })
       return
     }
 
     if (ownerProtectedPaths.has(currentPath) && !ownerToken) {
-      setOwnerMessage('Owner login required to access this page.')
       navigate('/owner/login', { replace: true })
     }
   }, [currentPath, token, ownerToken, navigate, userProtectedPaths, ownerProtectedPaths])
@@ -1754,6 +1637,20 @@ function App() {
             setOwnerNewRestaurantPhotoFile={setOwnerNewRestaurantPhotoFile}
             uploadOwnerRestaurantPhoto={uploadOwnerRestaurantPhoto}
             ownerRestaurantPhotoUploading={ownerRestaurantPhotoUploading}
+            ownerMessage={ownerMessage}
+          />
+        )
+      case '/owner/edit-restaurant':
+        return renderOwnerPage(
+          <OwnerEditRestaurantPage
+            ownerToken={ownerToken}
+            ownerRestaurants={ownerRestaurants}
+            selectedOwnerRestaurantId={selectedOwnerRestaurantId}
+            setSelectedOwnerRestaurantId={setSelectedOwnerRestaurantId}
+            ownerRestaurantForm={ownerRestaurantForm}
+            setOwnerRestaurantForm={setOwnerRestaurantForm}
+            saveOwnerRestaurantDetails={saveOwnerRestaurantDetails}
+            ownerRestaurantSaving={ownerRestaurantSaving}
             ownerMessage={ownerMessage}
           />
         )
