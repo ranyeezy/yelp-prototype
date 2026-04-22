@@ -294,6 +294,7 @@ class RecommendedRestaurant(MongoBaseModel):
     price_tier: Optional[int] = None
     score: float
     reason: str
+    photo_url: Optional[str] = None
 
 
 class AIChatResponse(BaseModel):

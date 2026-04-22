@@ -28,7 +28,7 @@ function RecommendationCard({ restaurant, getRestaurantImage, openRestaurantDeta
     >
       <div
         className="ai-rec-cover"
-        style={{ backgroundImage: `url(${getRestaurantImage(restaurant)})` }}
+        style={{ backgroundImage: `url(${restaurant.photo_url || getRestaurantImage(restaurant)})` }}
       />
       <div className="ai-rec-body">
         <div className="ai-rec-top">

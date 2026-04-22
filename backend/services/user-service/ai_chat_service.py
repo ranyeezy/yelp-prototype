@@ -1,23 +1,18 @@
 """
-AI Chat Service — LangChain + Groq (LLaMA 3) + MySQL
-
+AI Chat Service — LangChain + Groq (LLaMA 3) + MongoDB
 Flow:
-1. Load user preferences from DB
-2. Fetch all restaurants from DB
+1. Load user preferences from MongoDB
+2. Fetch all restaurants from MongoDB
 3. Build a system prompt with user prefs + restaurant data
 4. Send user message + conversation history to LLaMA 3 via Groq
 5. LLM decides what to recommend and writes a natural response
 6. Parse restaurant IDs mentioned in reply, attach them as structured recommendations
 """
 from __future__ import annotations
-
 import os
 import re
-
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-
-from . import models
+from bson import ObjectId
+from database import db
 
 # ── LangChain / Groq ─────────────────────────────────────────────────────────
 try:
@@ -28,256 +23,181 @@ except ImportError:
 
 try:
     from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-    _LC_MESSAGES_AVAILABLE = True
+    _LANGCHAIN_AVAILABLE = True
 except ImportError:
-    _LC_MESSAGES_AVAILABLE = False
+    _LANGCHAIN_AVAILABLE = False
 
-# ── Tavily web search ─────────────────────────────────────────────────────────
-try:
-    from tavily import TavilyClient
-    _TAVILY_AVAILABLE = True
-except ImportError:
-    _TAVILY_AVAILABLE = False
+import logging
 
-# Keywords that suggest the user wants live/web context
-_TAVILY_TRIGGER_WORDS = (
-    "hours", "open", "closed", "opening", "closing",
-    "event", "events", "special", "trending", "popular",
-    "today", "tonight", "this week", "weekend", "now",
-    "news", "new", "latest", "recently opened",
-)
+logger = logging.getLogger(__name__)
 
-
-def _should_use_tavily(message: str) -> bool:
-    """Only call Tavily when the user asks about live/real-world context."""
-    lowered = message.lower()
-    return any(word in lowered for word in _TAVILY_TRIGGER_WORDS)
-
-
-def _tavily_search(query: str, max_results: int = 3) -> str:
-    """Run a Tavily web search and return a compact context string."""
-    if not _TAVILY_AVAILABLE:
-        return ""
-    api_key = os.getenv("TAVILY_API_KEY", "").strip()
-    if not api_key:
-        return ""
+# ── Helper: Load User Preferences from MongoDB ───────────────────────────────
+def get_user_preferences(user_id: str) -> dict:
+    """Fetch user preferences from MongoDB"""
     try:
-        client = TavilyClient(api_key=api_key)
-        response = client.search(
-            query=query,
-            search_depth="basic",
-            max_results=max_results,
-            include_answer=True,
-        )
-        # Build a compact summary: direct answer + top result snippets
-        parts = []
-        if response.get("answer"):
-            parts.append(f"Web answer: {response['answer']}")
-        for result in response.get("results", [])[:max_results]:
-            title = result.get("title", "")
-            content = result.get("content", "")[:200]
-            url = result.get("url", "")
-            if content:
-                parts.append(f"- {title}: {content} ({url})")
-        return "\n".join(parts)
+        user = db.users.find_one({"_id": ObjectId(user_id)})
+        if not user:
+            return {}
+        
+        prefs = db.preferences.find_one({"user_id": ObjectId(user_id)})
+        if not prefs:
+            return {"cuisine_types": [], "price_range": "any"}
+        
+        return {
+            "cuisine_types": prefs.get("cuisine_types", []),
+            "price_range": prefs.get("price_range", "any"),
+            "dietary_restrictions": prefs.get("dietary_restrictions", []),
+            "distance_preference": prefs.get("distance_preference", "any"),
+        }
     except Exception as e:
-        return f"(Tavily search unavailable: {str(e)[:80]})"
+        logger.error(f"Error fetching user preferences: {e}")
+        return {}
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _price_symbol(tier) -> str:
-    if not isinstance(tier, int) or tier < 1:
-        return "N/A"
-    return "$" * min(max(tier, 1), 4)
-
-
-def _csv_to_list(value) -> list:
-    if not value:
-        return []
-    return [item.strip() for item in value.split(",") if item.strip()]
-
-
-def _get_avg_ratings(db: Session) -> dict:
-    rows = (
-        db.query(models.Review.restaurant_id, func.avg(models.Review.rating))
-        .group_by(models.Review.restaurant_id)
-        .all()
-    )
-    return {rid: round(float(avg), 2) for rid, avg in rows if avg is not None}
-
-
-def _build_restaurant_catalog(restaurants: list, rating_map: dict, limit: int = 40) -> str:
-    lines = []
-    for r in restaurants[:limit]:
-        avg = rating_map.get(r.id)
-        rating_str = f"{avg:.1f}" if avg else "no ratings yet"
-        lines.append(
-            f'ID:{r.id} | "{r.name}" | {r.cuisine_type} | {r.city}'
-            f' | {_price_symbol(r.price_tier)} | star:{rating_str}'
-            f' | {(r.description or "")[:80]}'
-        )
-    return "\n".join(lines)
-
-
-def _build_system_prompt(user_prefs, restaurant_catalog: str, tavily_context: str = "") -> str:
-    pref_block = ""
-    if user_prefs:
-        pref_parts = []
-        if user_prefs.cuisines:
-            pref_parts.append(f"Favourite cuisines: {user_prefs.cuisines}")
-        if user_prefs.preferred_locations:
-            pref_parts.append(f"Preferred locations: {user_prefs.preferred_locations}")
-        if user_prefs.price_max:
-            pref_parts.append(f"Max price tier: {_price_symbol(user_prefs.price_max)}")
-        if user_prefs.dietary_needs:
-            pref_parts.append(f"Dietary needs: {user_prefs.dietary_needs}")
-        if user_prefs.ambiance:
-            pref_parts.append(f"Preferred ambiance: {user_prefs.ambiance}")
-        if pref_parts:
-            pref_block = "User saved preferences:\n" + "\n".join(f"  - {p}" for p in pref_parts)
-
-    tavily_block = ""
-    if tavily_context and tavily_context.strip():
-        tavily_block = f"\nLive web context (from Tavily search — use this for hours, events, trending info):\n{tavily_context}"
-
-    return f"""You are a friendly, knowledgeable dining assistant for a Yelp-like restaurant discovery app.
-Your job is to help users find great restaurants through natural, warm conversation.
-
-{pref_block if pref_block else "No saved preferences on file for this user yet."}
-{tavily_block}
-Available restaurants in our database (use ONLY these, never invent restaurants):
-{restaurant_catalog}
-
-Instructions:
-- Respond naturally and conversationally, like a helpful friend who knows food well.
-- If the user greets you, chats casually, or asks something off-topic, respond warmly and guide them toward finding a restaurant.
-- When making recommendations, reference restaurants from the list above by their exact name.
-- Format recommendations as a numbered list: Name (cuisine, price, rating, city) - why it fits.
-- Always use the user's saved preferences to personalise suggestions when relevant.
-- Ask clarifying follow-up questions when the query is vague (e.g. "Which city?" or "Any dietary preferences?").
-- Keep casual replies short (1-2 sentences). Keep recommendation replies focused (max 3-4 picks with reasoning).
-- NEVER make up restaurants not in the database list.
-- After your reply, if you recommended specific restaurants, append exactly this on a new line:
-  RECOMMENDED_IDS: [id1, id2, id3]
-  (use the ID numbers from the database list above)
-"""
-
-
-def _call_llm(system_prompt: str, conversation_history: list, user_message: str) -> str:
-    if not _GROQ_AVAILABLE or not _LC_MESSAGES_AVAILABLE:
-        return _fallback_response(user_message)
-
-    api_key = os.getenv("GROQ_API_KEY", "").strip()
-    if not api_key:
-        return _fallback_response(user_message)
-
+# ── Helper: Load All Restaurants from MongoDB ────────────────────────────────
+def get_all_restaurants() -> list[dict]:
+    """Fetch all restaurants from MongoDB"""
     try:
-        llm = ChatGroq(
-            api_key=api_key,
-            model="llama-3.1-8b-instant",
-            temperature=0.7,
-            max_tokens=1024,
-        )
-
-        messages = [SystemMessage(content=system_prompt)]
-
-        for msg in conversation_history[-8:]:
-            role = str(msg.get("role", "")).lower()
-            content = str(msg.get("content", "")).strip()
-            if role == "user":
-                messages.append(HumanMessage(content=content))
-            elif role == "assistant":
-                messages.append(AIMessage(content=content))
-
-        messages.append(HumanMessage(content=user_message))
-
-        response = llm.invoke(messages)
-        return response.content if hasattr(response, "content") else str(response)
-
+        restaurants = list(db.restaurants.find().limit(50))  # Limit to 50 for context window
+        
+        # Convert ObjectId to string
+        for r in restaurants:
+            r["id"] = str(r["_id"])
+            r["listed_by_user_id"] = str(r.get("listed_by_user_id"))
+        
+        return restaurants
     except Exception as e:
-        return f"I'm having a little trouble right now — please try again in a moment. (Error: {str(e)[:120]})"
-
-
-def _fallback_response(user_message: str) -> str:
-    lowered = user_message.lower().strip()
-    greeting_pattern = re.compile(r'\b(hi|hello|hey|howdy|greetings|sup|yo)\b')
-    if greeting_pattern.search(lowered) and len(lowered) < 30:
-        return (
-            "Hi there! I'm your dining assistant.\n"
-            "Tell me what you're in the mood for — cuisine, budget, occasion, or city — "
-            "and I'll find the perfect spot for you!\n\n"
-            "Note: Add a GROQ_API_KEY to your .env to enable full AI responses."
-        )
-    return (
-        "I'd love to help you find a great restaurant! "
-        "Tell me what cuisine, city, or occasion you have in mind.\n\n"
-        "Note: Add a GROQ_API_KEY to your .env to enable full AI responses."
-    )
-
-
-def _extract_recommended_ids(llm_reply: str) -> list:
-    match = re.search(r"RECOMMENDED_IDS:\s*\[([^\]]*)\]", llm_reply, re.IGNORECASE)
-    if not match:
-        return []
-    try:
-        return [int(x.strip()) for x in match.group(1).split(",") if x.strip().isdigit()]
-    except Exception:
+        logger.error(f"Error fetching restaurants: {e}")
         return []
 
+# ── Helper: Parse Restaurant IDs from LLM Response ──────────────────────────
+def parse_restaurant_recommendations(response_text: str, restaurants: list[dict]) -> list[str]:
+    """
+    Parse restaurant IDs from LLM response.
+    Looks for patterns like "Restaurant ID: 507f1f77bcf86cd799439011" or restaurant names.
+    """
+    recommended_ids = []
+    
+    # Try to extract ObjectId-like patterns (24 hex chars)
+    id_pattern = r'[a-f0-9]{24}'
+    matches = re.findall(id_pattern, response_text)
+    
+    for match in matches:
+        try:
+            # Verify it's a valid ObjectId that exists in our restaurants
+            if any(r["id"] == match for r in restaurants):
+                recommended_ids.append(match)
+        except Exception:
+            pass
+    
+    # Also try to match by restaurant name
+    for restaurant in restaurants:
+        name = restaurant.get("name", "").lower()
+        if name and name in response_text.lower():
+            if restaurant["id"] not in recommended_ids:
+                recommended_ids.append(restaurant["id"])
+    
+    return recommended_ids[:5]  # Limit to 5 recommendations
 
-def _clean_reply(llm_reply: str) -> str:
-    return re.sub(r"\n?RECOMMENDED_IDS:\s*\[[^\]]*\]", "", llm_reply).strip()
-
-
-# ── Main entry point ──────────────────────────────────────────────────────────
-
+# ── Main AI Chat Function ────────────────────────────────────────────────────
 def recommend_restaurants(
-    db: Session,
-    user_id: int,
-    message: str,
-    conversation_history=None,
-    limit: int = 5,
-):
-    conversation_history = conversation_history or []
+    user_id: str,
+    user_message: str,
+    conversation_history: list[dict] = None,
+) -> dict:
+    """
+    AI-powered restaurant recommendation using LangChain + Groq.
+    
+    Args:
+        user_id: MongoDB user ID (string)
+        user_message: User's query
+        conversation_history: List of previous messages in format [{"role": "user"/"assistant", "content": "..."}]
+    
+    Returns:
+        {
+            "response": "Natural language response from LLM",
+            "recommendations": ["restaurant_id_1", "restaurant_id_2", ...],
+            "error": None or error message
+        }
+    """
+    
+    if not _GROQ_AVAILABLE or not _LANGCHAIN_AVAILABLE:
+        return {
+            "response": "AI recommendations are currently unavailable. Please try browsing restaurants manually.",
+            "recommendations": [],
+            "error": "LangChain or Groq not installed"
+        }
+    
+    try:
+        # Load user data from MongoDB
+        user_prefs = get_user_preferences(user_id)
+        all_restaurants = get_all_restaurants()
+        
+        if not all_restaurants:
+            return {
+                "response": "No restaurants available at the moment.",
+                "recommendations": [],
+                "error": None
+            }
+        
+        # Build restaurant context for LLM
+        restaurant_context = "Available Restaurants:\n"
+        for r in all_restaurants[:20]:  # Include first 20 for context
+            restaurant_context += f"\n- {r.get('name')} (ID: {r['id']})"
+            restaurant_context += f"\n  Cuisine: {r.get('cuisine_type', 'N/A')}"
+            restaurant_context += f"\n  Price Tier: {r.get('price_tier', 'N/A')}"
+            restaurant_context += f"\n  City: {r.get('city', 'N/A')}"
+            restaurant_context += f"\n  Rating: {r.get('rating', 'Not rated yet')}"
+        
+        # Build system prompt
+        system_prompt = f"""You are a helpful restaurant recommendation assistant.
+        
+User Preferences:
+- Cuisine Types: {', '.join(user_prefs.get('cuisine_types', ['Any'])) or 'Any'}
+- Price Range: {user_prefs.get('price_range', 'Any')}
+- Dietary Restrictions: {', '.join(user_prefs.get('dietary_restrictions', ['None'])) or 'None'}
 
-    user_prefs = db.get(models.UserPreference, user_id)
-    all_restaurants = db.query(models.Restaurant).all()
-    rating_map = _get_avg_ratings(db)
+{restaurant_context}
 
-    restaurant_catalog = _build_restaurant_catalog(all_restaurants, rating_map, limit=40)
-
-    # Fetch live web context via Tavily only when query is about hours/events/trending
-    tavily_context = ""
-    if _should_use_tavily(message):
-        tavily_context = _tavily_search(f"restaurant {message}")
-
-    system_prompt = _build_system_prompt(user_prefs, restaurant_catalog, tavily_context)
-
-    llm_reply = _call_llm(system_prompt, conversation_history, message)
-
-    recommended_ids = _extract_recommended_ids(llm_reply)
-    clean_reply = _clean_reply(llm_reply)
-
-    restaurant_map = {r.id: r for r in all_restaurants}
-    ranked = []
-    for rid in recommended_ids[:limit]:
-        r = restaurant_map.get(rid)
-        if r:
-            ranked.append({
-                "restaurant": r,
-                "score": 1.0,
-                "reason": "recommended by AI assistant",
-                "rating": rating_map.get(r.id),
-            })
-
-    extracted = {
-        "cuisines": user_prefs.cuisines if user_prefs and user_prefs.cuisines else [],
-        "city": user_prefs.preferred_locations if user_prefs and user_prefs.preferred_locations else None,
-        "max_price_tier": user_prefs.price_max if user_prefs and user_prefs.price_max else None,
-        "dietary": user_prefs.dietary_needs if user_prefs and user_prefs.dietary_needs else [],
-        "ambiance": user_prefs.ambiance if user_prefs and user_prefs.ambiance else [],
-        "sort_by": user_prefs.sort_preference if user_prefs and user_prefs.sort_preference else "rating",
-    }
-
-    return extracted, ranked, clean_reply, []
+When recommending restaurants, mention their names and IDs from the list above.
+Be conversational and helpful. If you recommend restaurants, include their exact IDs."""
+        
+        # Initialize Groq LLM
+        llm = ChatGroq(
+            model="llama-3.3-70b-versatile",
+            temperature=0.7,
+            groq_api_key=os.getenv("GROQ_API_KEY"),
+        )
+        
+        # Build message history
+        messages = [SystemMessage(content=system_prompt)]
+        
+        if conversation_history:
+            for msg in conversation_history:
+                if msg["role"] == "user":
+                    messages.append(HumanMessage(content=msg["content"]))
+                elif msg["role"] == "assistant":
+                    messages.append(AIMessage(content=msg["content"]))
+        
+        # Add current user message
+        messages.append(HumanMessage(content=user_message))
+        
+        # Get response from Groq
+        response = llm.invoke(messages)
+        response_text = response.content
+        
+        # Parse recommendations from response
+        recommendations = parse_restaurant_recommendations(response_text, all_restaurants)
+        
+        return {
+            "response": response_text,
+            "recommendations": recommendations,
+            "error": None
+        }
+    
+    except Exception as e:
+        logger.error(f"Error in recommend_restaurants: {e}")
+        return {
+            "response": "I encountered an error while processing your request. Please try again.",
+            "recommendations": [],
+            "error": str(e)
+        }
