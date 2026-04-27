@@ -288,9 +288,7 @@ POST /reviews
 {
   "restaurant_id": "64a1f...",
   "rating": 5,
-  "title": "Amazing!",
-  "text": "Outstanding food and atmosphere.",
-  "cuisine_experience": "loved it"
+  "comment": "Outstanding food and atmosphere."
 }
 ```
 
