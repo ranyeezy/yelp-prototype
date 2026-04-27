@@ -8,86 +8,44 @@ A full-stack restaurant discovery and review platform. Users can explore restaur
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React + Vite |
-| Backend | Python + FastAPI |
-| Database | MySQL |
+| Frontend | React + Vite + Redux Toolkit |
+| Backend | Python + FastAPI (microservices) |
+| Database | MongoDB |
+| Message Queue | Apache Kafka + Zookeeper |
 | Auth | JWT (separate flows for users & owners) |
-| AI | LangChain + Tavily web search |
+| AI | LangChain + Groq + Tavily web search |
+| Container | Docker + Docker Compose |
+| Orchestration | Kubernetes (AWS EKS) |
+| Gateway | Nginx reverse proxy |
 | Media | FastAPI StaticFiles for uploaded images |
 
 ---
 
-## 📋 Prerequisites
+## 🚀 Option A — Run with Docker Compose (Recommended)
 
-Before running locally, make sure you have:
+Runs the full stack locally: MongoDB, Kafka, Zookeeper, all microservices, and Nginx.
 
-- **Python 3.10+**
-- **Node.js 18+** *(required to run the React frontend)*
-- **MySQL 8+** running locally
+### Prerequisites
+- Docker Desktop running
+- `backend/.env` file with:
 
----
-
-## 🗄️ Step 1 — MySQL Database Setup
-
-Open your MySQL shell (`mysql -u root -p`) and run these commands once:
-
-```sql
-CREATE DATABASE yelp_prototype
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-
-CREATE USER 'yelp_user'@'localhost' IDENTIFIED BY 'yelp_pass_123';
-
-GRANT ALL PRIVILEGES ON yelp_prototype.* TO 'yelp_user'@'localhost';
-
-FLUSH PRIVILEGES;
-
-EXIT;
+```env
+JWT_SECRET=yelpsecretkey
+GROQ_API_KEY=your_groq_api_key_here
+TAVILY_API_KEY=your_tavily_api_key_here
 ```
 
----
-
-## ⚙️ Step 2 — Backend Setup
+### Start the backend
 
 ```bash
 cd backend
+docker-compose up -d
 ```
 
-Create `backend/.env`:
+All services start in order: Zookeeper → MongoDB → Kafka → microservices → Nginx.
+API gateway is available at `http://localhost`.
 
-```env
-DATABASE_URL=mysql+pymysql://yelp_user:yelp_pass_123@localhost:3306/yelp_prototype
-JWT_SECRET=my_super_secret_jwt_key_change_in_prod
-TAVILY_API_KEY=your_tavily_key_here
-```
-
-> `TAVILY_API_KEY` is optional — the AI assistant works without it but will not pull live web results.
-
-Install Python dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Start the backend server:
-
-```bash
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-✅ Backend is live at:
-
-| Resource | URL |
-|----------|-----|
-| API base | `http://127.0.0.1:8000` |
-| Swagger UI | `http://127.0.0.1:8000/docs` |
-| ReDoc | `http://127.0.0.1:8000/redoc` |
-
-> Database tables are created automatically on first startup.
-
----
-
-## 🎨 Step 3 — Frontend Setup
+### Start the frontend
 
 In a new terminal:
 
@@ -97,23 +55,123 @@ npm install
 npm run dev
 ```
 
-✅ Frontend starts at `http://localhost:5173`
+Frontend runs at `http://localhost:5173`. Ensure `frontend/.env.local` contains:
 
-When prompted in the app, set the **API Base URL** to `http://127.0.0.1:8000`
+```env
+VITE_API_URL=http://localhost
+```
+
+### Populate the database (first run only)
+
+```bash
+cd backend
+python3 populate_db.py
+```
+
+### Stop all services
+
+```bash
+cd backend
+docker-compose down
+```
+
+---
+
+## ☁️ Option B — Deploy to AWS EKS
+
+### Prerequisites
+- AWS CLI configured (`aws configure`)
+- `eksctl` and `kubectl` installed
+- Docker installed
+
+### 1. Create EKS cluster
+
+```bash
+eksctl create cluster --name=yelp-cluster --region=us-east-1 --nodes=3
+aws eks update-kubeconfig --name=yelp-cluster --region=us-east-1
+```
+
+### 2. Build and push images to ECR
+
+```bash
+# Authenticate Docker to ECR
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin <account-id>.dkr.ecr.us-east-1.amazonaws.com
+
+# Build with linux/amd64 (required on Apple Silicon Macs)
+docker build --platform linux/amd64 -t yelp/user-service \
+  -f services/user-service/Dockerfile.user services/user-service
+
+docker tag yelp/user-service:latest \
+  <account-id>.dkr.ecr.us-east-1.amazonaws.com/yelp/user-service:latest
+
+docker push <account-id>.dkr.ecr.us-east-1.amazonaws.com/yelp/user-service:latest
+```
+
+Repeat for: `owner-service`, `restaurant-service`, `review-service`, `restaurant-worker-service`, `review-worker-service`.
+
+### 3. Attach ECR permissions to node group
+
+In AWS IAM → find the node group role → attach `AmazonEC2ContainerRegistryReadOnly`.
+
+### 4. Create Kubernetes secret
+
+```bash
+kubectl create secret generic yelp-secrets --namespace yelp \
+  --from-literal=GROQ_API_KEY="your_groq_api_key_here"
+```
+
+### 5. Deploy to cluster
+
+```bash
+kubectl apply -f backend/k8s/k8s.yaml
+kubectl get pods -n yelp -w
+```
+
+### 6. Get public URL
+
+```bash
+kubectl get svc -n yelp nginx-gateway
+# Copy the EXTERNAL-IP value
+```
+
+### 7. Populate the database on EKS
+
+```bash
+kubectl port-forward -n yelp svc/mongodb 27017:27017 &
+python3 backend/populate_db_simple.py
+```
+
+### Scale a deployment
+
+```bash
+kubectl scale deployment user-service -n yelp --replicas=3
+```
+
+### Pause cluster (stop EC2 billing)
+
+```bash
+eksctl scale nodegroup --cluster=yelp-cluster --name=<nodegroup-name> --nodes=0 --nodes-min=0
+```
+
+### Delete cluster
+
+```bash
+eksctl delete cluster --name=yelp-cluster
+```
 
 ---
 
 ## 🚀 End-to-End Verification Flow
 
-1. Open `http://127.0.0.1:8000/docs` — confirm Swagger loads
-2. Open `http://localhost:5173` — confirm the homepage loads
-3. **Sign up** as a new user → log in → browse restaurants
-4. **Search** restaurants by name, cuisine, keywords, or city
-5. **Add a favorite** and view it in your Favorites tab
-6. **Write a review** with a star rating and optional photo
-7. **Update your profile** and configure dining preferences
-8. **Open AI Assistant** → ask for personalized restaurant recommendations
-9. **Sign up as an owner** → claim a restaurant → view your analytics dashboard
+1. Open `http://localhost:5173` — confirm the homepage loads
+2. **Sign up** as a new user → log in → browse restaurants
+3. **Search** restaurants by name, cuisine, keywords, or city
+4. **Add a favorite** and view it in your Favorites tab
+5. **Write a review** with a star rating and optional photo
+6. **Update your profile** and configure dining preferences
+7. **Open AI Assistant** → ask for personalized restaurant recommendations
+8. **Sign up as an owner** → claim a restaurant → view your analytics dashboard
 
 ---
 
@@ -163,10 +221,9 @@ When prompted in the app, set the **API Base URL** to `http://127.0.0.1:8000`
 |--------|----------|-------------|
 | POST | `/reviews` | Submit a review |
 | GET | `/reviews/restaurant/{id}` | Get reviews for a restaurant |
-| GET | `/reviews/me` | Get current user review history |
+| GET | `/reviews/my-reviews` | Get current user review history |
 | PUT | `/reviews/{id}` | Update own review |
 | DELETE | `/reviews/{id}` | Delete own review |
-| POST | `/reviews/uploads/photo` | Upload a review photo |
 
 </details>
 
@@ -229,9 +286,11 @@ POST /auth/users/signup
 ```json
 POST /reviews
 {
-  "restaurant_id": 1,
+  "restaurant_id": "64a1f...",
   "rating": 5,
-  "comment": "Outstanding food and atmosphere."
+  "title": "Amazing!",
+  "text": "Outstanding food and atmosphere.",
+  "cuisine_experience": "loved it"
 }
 ```
 
@@ -262,26 +321,32 @@ POST /ai-assistant/chat
 ```
 yelp-prototype/
 ├── backend/
-│   ├── app/
-│   │   ├── main.py            # FastAPI app entry point
-│   │   ├── models.py          # Database models
-│   │   ├── schemas.py         # Request and response schemas
-│   │   ├── database.py        # DB connection setup
-│   │   ├── security.py        # Password hashing and JWT
-│   │   ├── deps.py            # Auth dependency injection
-│   │   ├── ai_chat_service.py # LangChain AI integration
-│   │   ├── crud_*.py          # CRUD logic per resource
-│   │   └── routers/           # Route handlers per feature
-│   ├── uploads/               # Uploaded images (restaurants, reviews, profiles)
-│   └── requirements.txt
+│   ├── services/
+│   │   ├── user-service/          # Auth, profiles, sessions, AI assistant
+│   │   ├── owner-service/         # Owner auth and dashboard
+│   │   ├── restaurant-service/    # Restaurant CRUD + Kafka producer
+│   │   ├── review-service/        # Review CRUD + Kafka producer
+│   │   ├── restaurant-worker-service/  # Kafka consumer → MongoDB
+│   │   └── review-worker-service/      # Kafka consumer → MongoDB
+│   ├── k8s/
+│   │   └── k8s.yaml               # Full Kubernetes manifest
+│   ├── nginx/
+│   │   └── nginx.conf             # Reverse proxy config
+│   ├── docker-compose.yml
+│   ├── populate_db.py             # Populate via API (Docker Compose)
+│   └── populate_db_simple.py      # Populate directly via MongoDB (EKS)
 └── frontend/
     └── src/
+        ├── store/
+        │   ├── index.js           # Redux store
+        │   ├── slices/            # auth, restaurants, reviews, favorites
+        │   └── selectors/         # Selectors per slice
         ├── pages/
-        │   ├── public/        # Explore page and restaurant details
-        │   ├── user/          # Authenticated user pages
-        │   └── owner/         # Authenticated owner pages
-        ├── components/        # Shared UI components
-        └── App.jsx            # Router and app entry
+        │   ├── public/            # Explore page and restaurant details
+        │   ├── user/              # Authenticated user pages
+        │   └── owner/             # Authenticated owner pages
+        ├── components/            # Shared UI components
+        └── App.jsx
 ```
 
 ---
@@ -290,7 +355,7 @@ yelp-prototype/
 
 - Passwords are hashed with **bcrypt** — plaintext passwords are never stored.
 - JWT tokens are signed and expire; clients must re-authenticate to renew access.
-- Uploaded media is stored in `backend/uploads/` and served at `/uploads/<filename>`.
-- The `DATABASE_URL` in `.env` must match the MySQL credentials created in Step 1 exactly.
-- Tables are auto-created on first startup — no separate migration step required.
-- API documentation is available via Swagger at `/docs` once the backend is running.
+- Sessions are stored in MongoDB with a TTL index on `expires_at` for automatic expiry.
+- Uploaded media is stored per-service in `uploads/` and served at `/uploads/<filename>`.
+- Kafka topics (`review.created`, `review.updated`, `review.deleted`, `restaurant.created`) are auto-created on first message.
+- API documentation is available via Swagger at each service's `/docs` endpoint.
