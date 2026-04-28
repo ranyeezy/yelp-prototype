@@ -65,7 +65,7 @@ VITE_API_URL=http://localhost
 
 ```bash
 cd backend
-python3 populate_db.py
+python3 populate_db_simple.py
 ```
 
 ### Stop all services
